@@ -1,0 +1,49 @@
+name: campus-story
+services:
+  updater:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.updater
+    environment:
+      CAMPUS_UPDATE_INTERVAL: ${CAMPUS_UPDATE_INTERVAL:-21600}
+      CAMPUS_DOWNLOAD_WORKERS: ${CAMPUS_DOWNLOAD_WORKERS:-4}
+      CAMPUS_EXTRACT_WORKERS: ${CAMPUS_EXTRACT_WORKERS:-2}
+    volumes:
+      - runtime:/runtime
+    restart: unless-stopped
+  api:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    environment:
+      CAMPUS_PUBLIC_ORIGIN: ${CAMPUS_PUBLIC_ORIGIN:?Set public site origin}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:?Set GitHub OAuth client ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:?Set GitHub OAuth secret}
+      CAMPUS_RUNTIME_ROOT: /runtime
+      CAMPUS_API_HOST: 0.0.0.0
+      CAMPUS_API_PORT: 8787
+      CAMPUS_WORK_OWNER: chihya72
+      CAMPUS_WORK_REPO: gakumas-translation-work
+      CAMPUS_WORK_BRANCH: main
+    volumes:
+      - runtime:/runtime:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+  web:
+    build:
+      context: ..
+    ports:
+      - "${CAMPUS_BIND:-0.0.0.0}:${CAMPUS_PORT:-8080}:80"
+    volumes:
+      - runtime:/runtime:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  runtime:

@@ -1,0 +1,28 @@
+{
+  "category_id": "main.story",
+  "character_ids": [],
+  "classification_basis": "source_type",
+  "conditions": {
+    "unlocked_if": "cd-main-story-01-01-01-release"
+  },
+  "context": {},
+  "group_ids": [
+    "StoryGroup:main_story_group-01-01"
+  ],
+  "hints": [],
+  "id": "Story:story-main-01-01-01/advAssetId",
+  "idol_card_ids": [],
+  "inferred_character_ids": [],
+  "order": 1,
+  "previous_entry_id": null,
+  "produce_mode_ids": [],
+  "script_id": "adv_unit_01-01_01",
+  "source_field": "advAssetId",
+  "source_record_id": "Story:story-main-01-01-01",
+  "source_type": "StoryType_Main",
+  "support_card_ids": [],
+  "title": "1章1話",
+  "title_language": "ja",
+  "title_source": "source",
+  "voice_bindings": []
+}

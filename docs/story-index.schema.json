@@ -1,0 +1,658 @@
+{
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generator_version",
+    "sources",
+    "categories",
+    "characters",
+    "groups",
+    "entries",
+    "scripts",
+    "memberships",
+    "condition_sets",
+    "source_records",
+    "diagnostics",
+    "stats"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "2.0.0"
+    },
+    "generator_version": {
+      "type": "string"
+    },
+    "sources": {
+      "type": "object",
+      "required": [
+        "masterdata",
+        "stories"
+      ],
+      "properties": {
+        "masterdata": {
+          "type": "object",
+          "required": [
+            "git_commit",
+            "content_sha256",
+            "files"
+          ],
+          "properties": {
+            "git_commit": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "content_sha256": {
+              "type": "string"
+            },
+            "files": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "stories": {
+          "type": "object",
+          "required": [
+            "git_commit",
+            "content_sha256",
+            "files"
+          ],
+          "properties": {
+            "git_commit": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "content_sha256": {
+              "type": "string"
+            },
+            "files": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/category"
+      }
+    },
+    "characters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/character"
+      }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/group"
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    },
+    "scripts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/script"
+      }
+    },
+    "memberships": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/membership"
+      }
+    },
+    "condition_sets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      }
+    },
+    "source_records": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source_record"
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "stats": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Gakumas story index v2",
+  "$defs": {
+    "category": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "parent_id",
+        "entry_count",
+        "script_count",
+        "scripts_with_text"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entry_count": {
+          "type": "integer"
+        },
+        "script_count": {
+          "type": "integer"
+        },
+        "scripts_with_text": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "character": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "is_playable",
+        "speaker_names",
+        "speaker_patterns",
+        "order",
+        "source_record_ids"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "is_playable": {
+          "type": "boolean"
+        },
+        "speaker_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "speaker_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "order": {
+          "type": "integer"
+        },
+        "source_record_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "group": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "title_language",
+        "parent_id",
+        "parent_basis",
+        "order",
+        "character_ids",
+        "image_asset_id",
+        "conditions",
+        "source_record_id",
+        "metadata"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "character",
+            "main_part",
+            "main_chapter",
+            "story_group",
+            "event",
+            "idol_card",
+            "support_card",
+            "produce_mode",
+            "produce_story_family"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "title_language": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent_basis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "order": {
+          "type": "integer"
+        },
+        "character_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "image_asset_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "conditions": {
+          "$ref": "#/$defs/conditions"
+        },
+        "source_record_id": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "conditions": {
+      "type": "object",
+      "properties": {
+        "visible_if": {
+          "type": "string"
+        },
+        "unlocked_if": {
+          "type": "string"
+        },
+        "force_unlocked_if": {
+          "type": "string"
+        },
+        "item_unlocked_if": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "entry": {
+      "type": "object",
+      "required": [
+        "id",
+        "script_id",
+        "title",
+        "title_language",
+        "title_source",
+        "category_id",
+        "classification_basis",
+        "character_ids",
+        "inferred_character_ids",
+        "idol_card_ids",
+        "support_card_ids",
+        "produce_mode_ids",
+        "group_ids",
+        "order",
+        "conditions",
+        "hints",
+        "previous_entry_id",
+        "source_type",
+        "source_record_id",
+        "source_field",
+        "context",
+        "voice_bindings"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "script_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "title_language": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title_source": {
+          "enum": [
+            "source",
+            "generated",
+            "asset_id"
+          ]
+        },
+        "category_id": {
+          "type": "string"
+        },
+        "classification_basis": {
+          "enum": [
+            "source_type",
+            "explicit_relation",
+            "shared_script",
+            "filename_hint",
+            "fallback"
+          ]
+        },
+        "character_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inferred_character_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "idol_card_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "support_card_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "produce_mode_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "group_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "order": {
+          "type": "integer"
+        },
+        "conditions": {
+          "$ref": "#/$defs/conditions"
+        },
+        "hints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "previous_entry_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_record_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_field": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "context": {
+          "type": "object"
+        },
+        "voice_bindings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "source_field",
+              "asset_id"
+            ],
+            "properties": {
+              "source_field": {
+                "type": "string"
+              },
+              "asset_id": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "script": {
+      "type": "object",
+      "required": [
+        "id",
+        "asset_id",
+        "entry_ids",
+        "source_record_ids",
+        "category_ids",
+        "character_ids",
+        "inferred_character_ids",
+        "csv_path",
+        "file_sha256",
+        "source_text_sha256",
+        "text_row_count",
+        "translated_row_count",
+        "text_status",
+        "metadata_status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "asset_id": {
+          "type": "string"
+        },
+        "entry_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_record_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "category_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "character_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inferred_character_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "csv_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_text_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text_row_count": {
+          "type": "integer"
+        },
+        "translated_row_count": {
+          "type": "integer"
+        },
+        "text_status": {
+          "enum": [
+            "present",
+            "empty",
+            "missing"
+          ]
+        },
+        "metadata_status": {
+          "enum": [
+            "referenced",
+            "unlinked_masterdata"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "membership": {
+      "type": "object",
+      "required": [
+        "entry_id",
+        "group_id",
+        "position",
+        "source_record_id",
+        "source_field"
+      ],
+      "properties": {
+        "entry_id": {
+          "type": "string"
+        },
+        "group_id": {
+          "type": "string"
+        },
+        "position": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source_record_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_field": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "source_record": {
+      "type": "object",
+      "required": [
+        "id",
+        "table",
+        "key",
+        "key_strategy",
+        "data"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "table": {
+          "type": "string"
+        },
+        "key": {
+          "type": "object"
+        },
+        "key_strategy": {
+          "enum": [
+            "explicit",
+            "content_hash"
+          ]
+        },
+        "data": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

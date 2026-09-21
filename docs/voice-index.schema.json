@@ -1,0 +1,457 @@
+{
+  "type": "object",
+  "required": [
+    "schema_version",
+    "script_id",
+    "csv_alignment",
+    "lines",
+    "voice_events",
+    "source_texts_without_csv",
+    "embedded_timelines",
+    "diagnostics",
+    "sources"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "script_id": {
+      "type": "string"
+    },
+    "csv_alignment": {
+      "enum": [
+        "exact_sequence",
+        "normalized_narrator_sequence",
+        "partial_unique_text",
+        "missing_adv",
+        "missing_csv",
+        "missing_csv_and_adv"
+      ]
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/line"
+      }
+    },
+    "voice_events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/voice"
+      }
+    },
+    "source_texts_without_csv": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "embedded_timelines": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "sources": {
+      "type": "object",
+      "required": [
+        "csv_path",
+        "csv_sha256",
+        "adv_path",
+        "adv_sha256"
+      ],
+      "properties": {
+        "csv_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "csv_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "adv_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "adv_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Per-script Gakumas CSV voice index",
+  "$defs": {
+    "line": {
+      "type": "object",
+      "required": [
+        "id",
+        "csv_record_index",
+        "csv_line_start",
+        "csv_line_end",
+        "csv_id",
+        "speaker",
+        "text",
+        "translation",
+        "kind",
+        "csv_match_status",
+        "source_line",
+        "source_kind",
+        "scope",
+        "timing",
+        "voice_event_ids",
+        "context_voice_event_ids",
+        "audio_status",
+        "candidate_source_text_ids"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "csv_record_index": {
+          "type": "integer"
+        },
+        "csv_line_start": {
+          "type": "integer"
+        },
+        "csv_line_end": {
+          "type": "integer"
+        },
+        "csv_id": {
+          "type": "string"
+        },
+        "speaker": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "translation": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "choice",
+            "dialogue"
+          ]
+        },
+        "csv_match_status": {
+          "enum": [
+            "matched",
+            "unique_text",
+            "ambiguous",
+            "unmatched"
+          ]
+        },
+        "source_line": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source_kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timing": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "start_ms",
+                "duration_ms",
+                "clip_in_ms",
+                "time_scale"
+              ],
+              "properties": {
+                "start_ms": {
+                  "type": "number"
+                },
+                "duration_ms": {
+                  "type": "number"
+                },
+                "clip_in_ms": {
+                  "type": "number"
+                },
+                "time_scale": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "voice_event_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "context_voice_event_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "audio_status": {
+          "enum": [
+            "choice",
+            "csv_unmatched",
+            "linked",
+            "audio_unavailable",
+            "context_audio_only",
+            "no_explicit_voice"
+          ]
+        },
+        "candidate_source_text_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "match": {
+      "type": "object",
+      "required": [
+        "status",
+        "text_ids",
+        "context_text_ids",
+        "candidate_text_ids"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "matched_temporally",
+            "no_timing_or_reference",
+            "ambiguous",
+            "speaker_conflict",
+            "no_text_in_scope"
+          ]
+        },
+        "text_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "context_text_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "candidate_text_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "method": {
+          "type": "string"
+        },
+        "start_delta_ms": {
+          "type": "number"
+        },
+        "speaker_evidence": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "variant": {
+      "type": "object",
+      "required": [
+        "voice_ref",
+        "status",
+        "entry_ids",
+        "character_ids",
+        "audio_file_id",
+        "audio_path"
+      ],
+      "properties": {
+        "voice_ref": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "ambiguous_cue",
+            "cue_not_found",
+            "unresolved_parameter"
+          ]
+        },
+        "entry_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "character_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "audio_file_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "audio_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bank": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "audio_duration_ms": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "voice": {
+      "type": "object",
+      "required": [
+        "id",
+        "source_line",
+        "scope",
+        "timing",
+        "voice_ref",
+        "actor_id",
+        "channel",
+        "volume",
+        "attributes",
+        "text_match",
+        "audio_variants",
+        "voice_kind"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "source_line": {
+          "type": "integer"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "timing": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "start_ms",
+                "duration_ms",
+                "clip_in_ms",
+                "time_scale"
+              ],
+              "properties": {
+                "start_ms": {
+                  "type": "number"
+                },
+                "duration_ms": {
+                  "type": "number"
+                },
+                "clip_in_ms": {
+                  "type": "number"
+                },
+                "time_scale": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "voice_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "actor_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "channel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "volume": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "attributes": {
+          "type": "object"
+        },
+        "text_match": {
+          "$ref": "#/$defs/match"
+        },
+        "audio_variants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/variant"
+          }
+        },
+        "voice_kind": {
+          "enum": [
+            "dialogue",
+            "reaction",
+            "dynamic",
+            "system_or_other"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

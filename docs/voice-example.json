@@ -1,0 +1,85 @@
+{
+  "note": "真实分片节选，不是完整分片；audio_path 相对于 data/audio。",
+  "script_id": "adv_cidol-amao-3-000_01",
+  "sources": {
+    "adv_path": "adv_cidol-amao-3-000_01.txt",
+    "adv_sha256": "eb622c0935ecdb74c695505d9f1195a6527efcee8846d0d29da99eb5ccaa6bc9",
+    "csv_path": "CSV/cidol/amao/adv_cidol-amao-3-000_01.csv",
+    "csv_sha256": "b81759ee322a5fe1efbad5619b0e4305e6eed6826d6687281f3a1c97cbcfd02c"
+  },
+  "line": {
+    "audio_status": "linked",
+    "candidate_source_text_ids": [],
+    "context_voice_event_ids": [],
+    "csv_id": "0000000000000",
+    "csv_line_end": 3,
+    "csv_line_start": 3,
+    "csv_match_status": "matched",
+    "csv_record_index": 2,
+    "id": "adv_cidol-amao-3-000_01/text/c1f405f32daa5cf18910d710/1",
+    "kind": "dialogue",
+    "scope": "timeline:0",
+    "source_kind": "message",
+    "source_line": 13,
+    "speaker": "麻央",
+    "text": "なに、先輩として\\n当然のことをしたまでさ。",
+    "timing": {
+      "clip_in_ms": 0.0,
+      "duration_ms": 3733.0,
+      "start_ms": 5033.333333,
+      "time_scale": 1.0
+    },
+    "translation": "",
+    "voice_event_ids": [
+      "adv_cidol-amao-3-000_01/voice/1"
+    ]
+  },
+  "voice_events": [
+    {
+      "actor_id": "amao",
+      "attributes": {
+        "actorId": "amao",
+        "channel": "1",
+        "voice": "sud_vo_adv_cidol-amao-3-000_01_amao-001"
+      },
+      "audio_variants": [
+        {
+          "audio_duration_ms": 3633.0,
+          "audio_file_id": "sud_vo_adv_cidol-amao-3-000_01:1",
+          "audio_path": "clips/sud_vo_adv_cidol-amao-3-000_01/0001.wav",
+          "bank": "sud_vo_adv_cidol-amao-3-000_01",
+          "character_ids": [],
+          "entry_ids": [],
+          "status": "verified",
+          "voice_ref": "sud_vo_adv_cidol-amao-3-000_01_amao-001"
+        }
+      ],
+      "channel": "1",
+      "id": "adv_cidol-amao-3-000_01/voice/1",
+      "scope": "timeline:0",
+      "source_line": 14,
+      "text_match": {
+        "candidate_text_ids": [
+          "adv_cidol-amao-3-000_01/text/c1f405f32daa5cf18910d710/1"
+        ],
+        "context_text_ids": [],
+        "method": "start_proximity",
+        "speaker_evidence": "consistent",
+        "start_delta_ms": 100.0,
+        "status": "matched_temporally",
+        "text_ids": [
+          "adv_cidol-amao-3-000_01/text/c1f405f32daa5cf18910d710/1"
+        ]
+      },
+      "timing": {
+        "clip_in_ms": 0.0,
+        "duration_ms": 3633.0,
+        "start_ms": 5133.333333,
+        "time_scale": 1.0
+      },
+      "voice_kind": "dialogue",
+      "voice_ref": "sud_vo_adv_cidol-amao-3-000_01_amao-001",
+      "volume": null
+    }
+  ]
+}
