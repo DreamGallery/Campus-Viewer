@@ -71,3 +71,10 @@ logs/
 *.njsproj
 *.sln
 *.sw?
+
+# Cloudflare local state and secrets
+.wrangler/
+.dev.vars*
+!.dev.vars.example
+wrangler.local.jsonc
+.cloudflare-dist/

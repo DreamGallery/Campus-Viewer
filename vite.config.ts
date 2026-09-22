@@ -9,6 +9,8 @@ import { resolve, sep } from 'node:path';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'CAMPUS_');
   return {
+    publicDir: process.env.CAMPUS_CLOUDFLARE_BUILD ? '.wrangler/ui-public' : 'public',
+    build: { outDir: process.env.CAMPUS_CLOUDFLARE_BUILD ? '.cloudflare-dist' : 'dist' },
     plugins: [react(), {
       name: 'campus-local-data',
       configureServer(server) {

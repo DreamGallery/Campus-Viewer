@@ -1,0 +1,15 @@
+name: campus-r2-updater
+services:
+  updater:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.updater
+    env_file: .env.r2.local
+    environment:
+      CAMPUS_PUBLISH_TARGET: r2
+      CAMPUS_RUNTIME_ROOT: /runtime
+    volumes:
+      - runtime:/runtime
+    restart: unless-stopped
+volumes:
+  runtime:

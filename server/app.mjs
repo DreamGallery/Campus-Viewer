@@ -7,17 +7,17 @@ import { pathToFileURL } from 'node:url';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const random = () => randomBytes(32).toString('base64url');
-export function createApp(env = process.env, remoteFetch = fetch) {
+export function createApp(env = process.env, remoteFetch = fetch, services = {}) {
   const origin = new URL(env.CAMPUS_PUBLIC_ORIGIN || 'http://127.0.0.1:5173').origin;
   const owner = env.CAMPUS_WORK_OWNER || 'chihya72', repo = env.CAMPUS_WORK_REPO || 'gakumas-translation-work', branch = env.CAMPUS_WORK_BRANCH || 'main';
   const configured = !!(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET);
-  const sessions = new Map(), pending = new Map();
+  const sessions = services.sessions || new Map(), pending = services.pending || new Map();
   const cookieName = 'campus_session';
   const cookie = (name, value, age) => `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${origin.startsWith('https:') ? '; Secure' : ''}`;
-  const clean = () => { for (const map of [sessions, pending]) for (const [key, val] of map) if (val.expires < Date.now()) map.delete(key); };
+  const clean = () => { for (const map of [sessions, pending]) for (const [key, val] of (map instanceof Map ? map : [])) if (val.expires < Date.now()) map.delete(key); };
   async function gh(session, method, path, body) {
     const response = await remoteFetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}${path ? '/' + path : ''}`, {
-      method, headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(session ? { Authorization: `Bearer ${session.token}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      method, headers: { 'User-Agent': 'Campus-Story-Viewer', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(session ? { Authorization: `Bearer ${session.token}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000), redirect: 'error',
     });
     if (!response.ok) throw fail(response.status, response.status === 404 ? 'GitHub 中没有此文件或任务' : response.status === 403 ? 'GitHub 拒绝操作：请检查仓库权限或 API 限额' : response.status === 409 || response.status === 422 ? '远端已变化，请重新加载后合并修改' : `GitHub 请求失败（${response.status}）`);
@@ -40,6 +40,7 @@ export function createApp(env = process.env, remoteFetch = fetch) {
   async function content(session, path, ref = branch) { return gh(session, 'GET', `contents/${filePath(path)}?ref=${encodeURIComponent(ref)}`); }
   async function shaAt(session, path, ref) { try { return (await content(session, path, ref)).sha; } catch (e) { if (e.status === 404) return null; throw e; } }
   async function localFile(root, relative) {
+    if (services.readFile) return services.readFile(root, relative);
     if (!root) throw fail(503, '未配置本地文本目录');
     const realRoot = await realpath(root), file = await realpath(resolve(realRoot, relative));
     if (!file.startsWith(realRoot + sep)) throw fail(403, '文件不在配置目录内');
@@ -56,14 +57,16 @@ export function createApp(env = process.env, remoteFetch = fetch) {
     const redirect = url => { res.writeHead(302, { Location: url }); res.end(); };
     try {
       clean(); const url = new URL(req.url, origin);
-      if (await resourceRequest(env, req, res, url)) return;
+      if (await (services.resourceRequest || resourceRequest)(env, req, res, url)) return;
       if (url.pathname === '/api/health' && req.method === 'GET') return json({ ok: true });
       if (url.pathname === '/api/resources/status' && req.method === 'GET') {
+        if (services.status) return json(await services.status());
         if (!env.CAMPUS_RUNTIME_ROOT) return json({ state: 'unmanaged' });
         try { return json(JSON.parse(await localFile(env.CAMPUS_RUNTIME_ROOT, 'status.json'))); }
         catch (e) { if (e.code === 'ENOENT') return json({ state: 'initializing', phase: '等待资源初始化' }); throw e; }
       }
       async function sourceRoots() {
+        if (services.sourceRoots) return services.sourceRoots();
         if (!env.CAMPUS_RUNTIME_ROOT) return { web: env.CAMPUS_WEB_DATA, story: env.CAMPUS_STORY_ROOT, adv: env.CAMPUS_ADV_ROOT };
         let release;
         try { release = await realpath(resolve(env.CAMPUS_RUNTIME_ROOT, 'current')); }
@@ -71,31 +74,32 @@ export function createApp(env = process.env, remoteFetch = fetch) {
         return { web: resolve(release, 'web'), story: resolve(release, 'story'), adv: resolve(release, 'adv') };
       }
       const cookies = Object.fromEntries((req.headers.cookie || '').split(';').map(x => x.trim().split('=')));
-      const session = sessions.get(cookies[cookieName]);
+      const candidate = await sessions.get(cookies[cookieName]);
+      const session = candidate?.expires > Date.now() ? candidate : undefined;
       if (url.pathname === '/api/auth/status' && req.method === 'GET') return json({ canCollaborate: await canCollaborate(session), configured, user: session?.user || null, csrf: session?.csrf || null, work: { owner, repo, branch } });
       if (url.pathname === '/api/auth/login' && req.method === 'GET') {
         if (!configured) throw fail(503, '请先配置 GitHub OAuth 应用');
         const state = random(), verifier = random();
         const requested = url.searchParams.get('returnTo') || '/idols';
         const returnTo = /^\/(?!\/)[a-zA-Z0-9_/?=&%.-]*$/.test(requested) ? requested : '/idols';
-        pending.set(state, { verifier, returnTo, expires: Date.now() + 600000 });
+        await pending.set(state, { verifier, returnTo, expires: Date.now() + 600000 });
         res.setHeader('Set-Cookie', cookie('campus_oauth', state, 600));
         const query = new URLSearchParams({ client_id: env.GITHUB_CLIENT_ID, redirect_uri: `${origin}/api/auth/callback`, scope: 'public_repo read:user', state, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' });
         return redirect(`https://github.com/login/oauth/authorize?${query}`);
       }
       if (url.pathname === '/api/auth/callback' && req.method === 'GET') {
-        const state = url.searchParams.get('state'); const flow = pending.get(state);
-        if (!flow || !state || state !== cookies.campus_oauth) throw fail(400, '登录验证已失效，请重新登录');
-        pending.delete(state); res.setHeader('Set-Cookie', cookie('campus_oauth', '', 0));
+        const state = url.searchParams.get('state'); const flow = state && state === cookies.campus_oauth ? await (pending.take ? pending.take(state) : pending.get(state)) : null;
+        if (!flow || flow.expires <= Date.now() || !state || state !== cookies.campus_oauth) throw fail(400, '登录验证已失效，请重新登录');
+        await pending.delete(state); res.setHeader('Set-Cookie', cookie('campus_oauth', '', 0));
         if (!url.searchParams.get('code')) throw fail(400, 'GitHub 登录未授权');
-        const tokenResponse = await remoteFetch('https://github.com/login/oauth/access_token', { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: env.GITHUB_CLIENT_ID, client_secret: env.GITHUB_CLIENT_SECRET, code: url.searchParams.get('code'), redirect_uri: `${origin}/api/auth/callback`, code_verifier: flow.verifier }), signal: AbortSignal.timeout(30000), redirect: 'error' });
+        const tokenResponse = await remoteFetch('https://github.com/login/oauth/access_token', { method: 'POST', headers: { 'User-Agent': 'Campus-Story-Viewer', Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: env.GITHUB_CLIENT_ID, client_secret: env.GITHUB_CLIENT_SECRET, code: url.searchParams.get('code'), redirect_uri: `${origin}/api/auth/callback`, code_verifier: flow.verifier }), signal: AbortSignal.timeout(30000), redirect: 'error' });
         const token = await tokenResponse.json();
         if (!tokenResponse.ok || !token.access_token) throw fail(502, 'GitHub 令牌交换失败，请重新登录');
-        const userResponse = await remoteFetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${token.access_token}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(30000), redirect: 'error' });
+        const userResponse = await remoteFetch('https://api.github.com/user', { headers: { 'User-Agent': 'Campus-Story-Viewer', Authorization: `Bearer ${token.access_token}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(30000), redirect: 'error' });
         if (!userResponse.ok) throw fail(502, '获取 GitHub 用户失败');
         const user = await userResponse.json(); const sid = random();
-        sessions.delete(cookies[cookieName]);
-        sessions.set(sid, { token: token.access_token, user: { login: user.login, name: user.name }, csrf: random(), expires: Date.now() + Math.min(28800, Number(token.expires_in) || 28800) * 1000 });
+        await sessions.delete(cookies[cookieName]);
+        await sessions.set(sid, { token: token.access_token, user: { login: user.login, name: user.name }, csrf: random(), expires: Date.now() + Math.min(28800, Number(token.expires_in) || 28800) * 1000 });
         res.setHeader('Set-Cookie', [cookie('campus_oauth', '', 0), cookie(cookieName, sid, 28800)]);
         return redirect(flow.returnTo);
       }
@@ -119,13 +123,13 @@ export function createApp(env = process.env, remoteFetch = fetch) {
       if (req.headers.origin !== origin) throw fail(403, '请求来源不匹配');
       const input = await bodyOf(req);
       const requireAuth = () => { if (!session) throw fail(401, '请先登录 GitHub'); if (req.headers['x-csrf-token'] !== session.csrf) throw fail(403, '会话验证失败，请刷新页面'); };
-      if (url.pathname === '/api/auth/logout') { requireAuth(); sessions.delete(cookies[cookieName]); res.setHeader('Set-Cookie', cookie(cookieName, '', 0)); return json({ ok: true }); }
+      if (url.pathname === '/api/auth/logout') { requireAuth(); await sessions.delete(cookies[cookieName]); res.setHeader('Set-Cookie', cookie(cookieName, '', 0)); return json({ ok: true }); }
       if (url.pathname === '/api/github/read') {
         if (['findIssue', 'issue', 'issues'].includes(input.kind)) await requireCollaborator(session);
         if (input.kind === 'findIssue') {
           if (!/^[\w-]+$/.test(input.scriptId || '')) throw fail(400, '无效章节');
           const query = new URLSearchParams({ q: `repo:${owner}/${repo} is:issue in:title ${input.scriptId}`, per_page: '100' });
-          const response = await remoteFetch(`https://api.github.com/search/issues?${query}`, { headers: { Accept: 'application/vnd.github+json', ...(session ? { Authorization: `Bearer ${session.token}` } : {}) }, signal: AbortSignal.timeout(30000), redirect: 'error' });
+          const response = await remoteFetch(`https://api.github.com/search/issues?${query}`, { headers: { 'User-Agent': 'Campus-Story-Viewer', Accept: 'application/vnd.github+json', ...(session ? { Authorization: `Bearer ${session.token}` } : {}) }, signal: AbortSignal.timeout(30000), redirect: 'error' });
           if (!response.ok) throw fail(response.status, '任务查询失败，请检查 GitHub 限额或稍后重试');
           const result = await response.json();
           return json(result.items.filter(i => i.title === input.scriptId));

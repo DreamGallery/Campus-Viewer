@@ -68,3 +68,7 @@ python3 scripts/package_deploy.py
 字体使用 IBM Plex Sans、Plex Sans SC、Plex Sans JP，由 npm 包提供并本地打包。许可证在 `public/fonts/`；更换字体版本后运行 `python3 scripts/build-font-css.py` 更新 CSS。
 
 翻译工序逻辑基于 [gakumas-viewer](https://github.com/chihya72/gakumas-viewer)，保留 [上游 MIT 许可证](src/workbench/upstream/LICENSE)。默认工作仓库为 [gakumas-translation-work](https://github.com/chihya72/gakumas-translation-work)。游戏资源及素材权利归各权利人所有，本项目为非官方网站。
+
+## Cloudflare 混合部署
+
+Workers + D1 托管网页和协作接口，R2 保存资源，Docker 更新器负责解包上传。详细配置、旧桶隔离、初始化、回滚边界与测试步骤见 [Cloudflare 部署文档](docs/cloudflare-deployment.md)。

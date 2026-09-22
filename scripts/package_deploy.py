@@ -8,7 +8,7 @@ def package(output):
     root = Path(__file__).resolve().parents[1]
     allowed = ['README.md', '.gitignore', '.dockerignore', '.env.oauth.example',
                'campus_story_index', 'docker', 'deploy', 'docs', 'tests', 'scripts',
-               'requirements.txt', 'requirements-audio.txt', 'requirements-assets.txt', 'requirements-dev.txt',
+               'requirements.txt', 'requirements-audio.txt', 'requirements-assets.txt', 'requirements-dev.txt', 'requirements-r2.txt', 'cloudflare', 'wrangler.jsonc', '.dev.vars.example',
                'src', 'server', 'public/theme-init.js', 'public/images/icon', 'public/images/filters',
                'public/images/official', 'public/images/img_pattern_artdeco.png',
                'public/images/bg_character_standing.png', 'public/fonts',
@@ -19,7 +19,8 @@ def package(output):
         parts = Path(info.name).parts
         if '__pycache__' in parts or '.DS_Store' in parts or info.issym() or info.islnk(): return None
         if any(p.startswith('.env') and not p.endswith('.example') for p in parts): return None
-        if info.name.endswith(('.pyc', '.log')): return None
+        if any(p.startswith('.dev.vars') and not p.endswith('.example') for p in parts): return None
+        if info.name.endswith(('.pyc', '.log', '.local', '.local.jsonc')): return None
         info.uid = info.gid = 0; info.uname = info.gname = ''
         return info
     output.parent.mkdir(parents=True, exist_ok=True)

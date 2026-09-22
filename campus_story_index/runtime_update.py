@@ -65,6 +65,9 @@ def publish(root, cache, repos, manifest=None):
         shutil.copytree(repos / 'adv/Resource', stage / 'adv')
         versions = prepare_archive(root, stage, manifest) if manifest is not None else None
         os.replace(stage, releases / name)
+        if os.getenv('CAMPUS_PUBLISH_TARGET', 'local') == 'r2':
+            from .r2_publish import publish_release
+            publish_release(root, name)
         temp = root / '.current-next'
         temp.unlink(missing_ok=True)
         temp.symlink_to(Path('releases') / name, target_is_directory=True)
