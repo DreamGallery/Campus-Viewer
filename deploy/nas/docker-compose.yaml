@@ -1,0 +1,18 @@
+name: campus-r2-updater
+services:
+  updater:
+    image: ${CAMPUS_UPDATER_IMAGE:-dreamgallery/campus-r2-updater:20260922-cf1}
+    env_file: .env.r2.local
+    environment:
+      CAMPUS_PUBLISH_TARGET: r2
+      CAMPUS_RUNTIME_ROOT: /runtime
+    volumes:
+      - runtime:/runtime
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  runtime:

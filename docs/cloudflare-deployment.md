@@ -246,3 +246,44 @@ Wrangler 部署只上传本地构建到 Cloudflare，**不需要先推送 GitHub
 | Workers CPU 超限 | 查看日志/指标，评估付费 CPU 配额；解包始终留在 Docker |
 
 官方参考：[Workers Node HTTP](https://developers.cloudflare.com/workers/runtime-apis/nodejs/http/)、[Workers SPA](https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/)、[R2 绑定](https://developers.cloudflare.com/r2/api/workers/workers-api-usage/)、[R2 S3 兼容性](https://developers.cloudflare.com/r2/api/s3/api/)、[D1 预编译语句](https://developers.cloudflare.com/d1/worker-api/prepared-statements/)。
+
+## 12. Mac 构建并推送 Docker Hub，Debian/NAS 只拉取镜像
+
+Mac 需要已启动的 Docker Engine（Docker Desktop 或 Colima），以及 Buildx。Apple Silicon 为 ARM64，如果 NAS 为 x86_64，必须构建 linux/amd64；也可发布包含 amd64、arm64 的多架构镜像。Docker 会自动选取匹配 NAS 的架构。
+
+Mac 仓库根目录执行，使用自己的 Docker Hub 仓库及唯一版本号：
+
+```sh
+docker login
+sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20260922-cf1 linux/amd64
+```
+
+构建过程不需要 R2 密钥。`.dockerignore` 的白名单与 Dockerfile 的显式 COPY 会排除实际环境文件和下载资源。脚本逐架构验证 Python 依赖、解码器和入口后，只推送指定版本标签，不覆盖 latest，不改变当前 Docker context。跨架构仿真编译首次可能较慢。
+
+NAS 需要 Compose 和 R2 配置，另可用 `.env` 覆盖镜像版本，放在同一目录：
+
+- `deploy/nas/docker-compose.yaml` → `docker-compose.yaml`
+- 可选：`deploy/nas/.env.example` → `.env`，覆盖镜像版本或固定 digest；默认使用 `dreamgallery/campus-r2-updater:20260922-cf1`。
+- 已填好的 `deploy/.env.r2.local` → `.env.r2.local`，单独传输，不要放到 Docker Hub。
+
+在 NAS 上执行：
+
+```sh
+chmod 600 .env.r2.local
+docker compose config --quiet
+docker compose pull
+docker compose up -d
+docker compose logs -f --tail=100 updater
+```
+
+旧版 `docker-compose` 可使用相应命令，但建议安装 Docker Compose v2 插件。私有 Docker Hub 仓库需要在 NAS 上先 `docker login`。此部署不需要监听端口、特权模式或挂载 Docker socket。
+
+升级时先修改 `.env` 中的镜像版本，再执行 `docker compose pull && docker compose up -d`。游戏资源由容器内部每六小时更新，不依赖镜像重建；只有更新器代码变化才需发布新镜像。
+
+Compose 使用 `campus-r2-updater_runtime` 命名卷，与默认的源码构建版本项目/卷名称一致。在同一 Docker 主机迁移时，先停止旧容器再启动新配置，勿删除数据卷、勿同时启动两个更新器。命名卷实际名称可用 `docker volume ls` 核对。
+
+本地构建不等于已验证 NAS 的完整冷启动。首次部署请观察日志，确认下载、解包和 R2 发布完整成功后，再进行网站资源验收。
+
+构建时如果默认 Debian 线路较慢，可设置 `CAMPUS_DEBIAN_MIRROR=https://mirrors.ustc.edu.cn` 再运行发布脚本，软件包签名校验保持启用。该参数只影响镜像构建，不需要放入 NAS 的 R2 环境文件。
+
+Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple` 指定镜像；默认仍使用 PyPI 官方源。首个 NAS 版本为 `dreamgallery/campus-r2-updater:20260922-cf1`（linux/amd64），已在该镜像内通过 71 项回归测试、真实 ACB 解码及 R2 连接验证。
