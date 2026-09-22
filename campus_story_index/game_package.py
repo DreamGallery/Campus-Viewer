@@ -19,7 +19,9 @@ RESOURCE = {'adv': 'adventure', 'img': 'image', 'mov': 'movie', 'sud': 'sound'}
 
 
 def safe_name(name):
-    if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9_.-]+', name) or name in ('.', '..'):
+    # The game manifest contains U+2010 in short‐circuit. Preserve the exact name;
+    # normalizing it would break remote resource identity and incremental matching.
+    if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9_.\-\u2010]+', name) or name in ('.', '..'):
         raise ValueError('Unsafe resource filename')
     return name
 

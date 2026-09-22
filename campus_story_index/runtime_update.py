@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import uuid
+import traceback
 
 from .io import atomic_write
 from .resource_archive import prepare_archive, prune_archives
@@ -129,6 +130,9 @@ def update(root):
             status.update(state='error', error=type(exc).__name__ + '；请查看更新器日志')
             phase(status.get('phase', '初始化'))
             print(f'Update failed during {status["phase"]}: {type(exc).__name__}', flush=True)
+            # Report code locations without exception messages, locals, URLs or credentials.
+            for frame in traceback.extract_tb(exc.__traceback__):
+                print(f'  at {Path(frame.filename).name}:{frame.lineno} in {frame.name}', flush=True)
             return False
 
 

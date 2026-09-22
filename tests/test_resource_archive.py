@@ -80,3 +80,20 @@ class ArchiveTests(unittest.TestCase):
             self.assertEqual(info['removed'],['resourceList/adv_removed.txt'])
             self.assertEqual(info['files'],1)
             self.assertEqual((output/'adv_test.txt').read_text(),'decoded')
+
+
+class UnicodeResourceNameTests(unittest.TestCase):
+    def test_real_manifest_hyphen_survives_initial_baseline_and_rejects_paths(self):
+        name = 'sud_se_adv_short\u2010circuit-01.acb'
+        self.assertEqual(safe_name(name), name)
+        sample = manifest(62)
+        sample['resourceList'][0]['name'] = name
+        self.assertIn('resourceList/' + name, snapshot(sample))
+        from campus_story_index.resource_archive import prepare_archive
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder); stage = root / 'release'; stage.mkdir()
+            self.assertEqual(prepare_archive(root, stage, sample), [])
+            saved = json.loads((stage / 'resource-snapshot.json').read_text())
+            self.assertEqual(saved['resources']['resourceList/' + name]['name'], name)
+        for bad in ['../evil', '/absolute', 'a/b', 'a\\b', '.', '..', 'x\x00y', 'x\ny', 'x:y']:
+            with self.subTest(name=bad), self.assertRaises(ValueError): safe_name(bad)

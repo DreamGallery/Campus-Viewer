@@ -255,7 +255,7 @@ Mac 仓库根目录执行，使用自己的 Docker Hub 仓库及唯一版本号�
 
 ```sh
 docker login
-sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20260922-cf1 linux/amd64
+sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20260922-cf2 linux/amd64
 ```
 
 构建过程不需要 R2 密钥。`.dockerignore` 的白名单与 Dockerfile 的显式 COPY 会排除实际环境文件和下载资源。脚本逐架构验证 Python 依赖、解码器和入口后，只推送指定版本标签，不覆盖 latest，不改变当前 Docker context。跨架构仿真编译首次可能较慢。
@@ -263,7 +263,7 @@ sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20260922-cf1 
 NAS 需要 Compose 和 R2 配置，另可用 `.env` 覆盖镜像版本，放在同一目录：
 
 - `deploy/nas/docker-compose.yaml` → `docker-compose.yaml`
-- 可选：`deploy/nas/.env.example` → `.env`，覆盖镜像版本或固定 digest；默认使用 `dreamgallery/campus-r2-updater:20260922-cf1`。
+- 可选：`deploy/nas/.env.example` → `.env`，覆盖镜像版本或固定 digest；默认使用 `dreamgallery/campus-r2-updater:20260922-cf2`。
 - 已填好的 `deploy/.env.r2.local` → `.env.r2.local`，单独传输，不要放到 Docker Hub。
 
 在 NAS 上执行：
@@ -286,4 +286,4 @@ Compose 使用 `campus-r2-updater_runtime` 命名卷，与默认的源码构建�
 
 构建时如果默认 Debian 线路较慢，可设置 `CAMPUS_DEBIAN_MIRROR=https://mirrors.ustc.edu.cn` 再运行发布脚本，软件包签名校验保持启用。该参数只影响镜像构建，不需要放入 NAS 的 R2 环境文件。
 
-Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple` 指定镜像；默认仍使用 PyPI 官方源。首个 NAS 版本为 `dreamgallery/campus-r2-updater:20260922-cf1`（linux/amd64），已在该镜像内通过 71 项回归测试、真实 ACB 解码及 R2 连接验证。
+Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple` 指定镜像；默认仍使用 PyPI 官方源。首个 NAS 版本为 `dreamgallery/campus-r2-updater:20260922-cf2`（linux/amd64），已在该镜像内通过 72 项回归测试、真实 ACB 解码及 R2 连接验证。
