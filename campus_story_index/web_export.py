@@ -20,7 +20,7 @@ def canonical_directory_entries(entries, groups):
     group_scripts = defaultdict(set)
     candidates = defaultdict(list)
     for entry in entries:
-        if entry['category_id'].startswith(('event.', 'character.')):
+        if entry['category_id'].startswith(('event.', 'character.')) or entry['category_id'] == 'other.training_shared':
             candidates[entry['script_id']].append(entry)
             for gid in entry['group_ids']:
                 if groups.get(gid, {}).get('kind') == 'story_group':
@@ -218,12 +218,14 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
             'group_order': g['order'] if g else 0, 'group_image': image_for(g) if g else None,
             'group_images': images_for(g) if g else [],
             'text_status': s['text_status'], 'line_count': s['text_row_count']})
+        if e['category_id'] == 'other.training_shared' and e.get('context', {}).get('original_category_id') == 'character.training_school':
+            item.update(group_id='shared-training-school', group_title='培养校园剧情', group_order=0)
         item.update(entry_metadata(e, g))
         item['text_updated_at'] = updated.get(s.get('csv_path'))
         if item['card_character_ids']:
             item['character_ids'] = sorted(set(item['character_ids']) | set(item['card_character_ids']))
         category = e['category_id'].split('.')[0]
-        deduplicate = category in ('event', 'character')
+        deduplicate = category in ('event', 'character') or e['category_id'] == 'other.training_shared'
         if not deduplicate or preferred_events[e['script_id']] == e['id']:
             directory_item = {**item, 'source_entry_ids': event_sources[e['script_id']]} if deduplicate else item
             if category == 'character':

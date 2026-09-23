@@ -229,3 +229,21 @@ class EventBranchTests(unittest.TestCase):
         self.assertEqual(builder.entries['ProduceStory:c/advAssetId']['produce_mode_ids'],[])
         self.assertEqual(len(calls),2)
         self.assertEqual(calls[0][2],'successStepId')
+
+
+class SharedTrainingTests(unittest.TestCase):
+    def test_partial_roster_shared_script_moves_but_personal_and_cards_stay(self):
+        builder=CatalogBuilder.__new__(CatalogBuilder)
+        def entry(cat,chars):return {'category_id':cat,'character_ids':chars,'context':{},'classification_basis':'source_type'}
+        school=[entry('character.training_school',['a']),entry('character.training_school',['b'])]
+        personal=[entry('character.training_story',['a'])]
+        card=[entry('character.idol_card',['a','b'])]
+        unit=[entry('character.training_stage',['a','b'])]
+        builder.by_script={'shared':school,'unique':personal,'card':card,'unit':unit}
+        builder.classify_shared_training()
+        self.assertEqual({e['category_id'] for e in school},{'other.training_shared'})
+        self.assertEqual(school[0]['context']['shared_character_ids'],['a','b'])
+        self.assertEqual(school[0]['context']['original_category_id'],'character.training_school')
+        self.assertEqual(personal[0]['category_id'],'character.training_story')
+        self.assertEqual(card[0]['category_id'],'character.idol_card')
+        self.assertEqual(unit[0]['category_id'],'other.training_shared')

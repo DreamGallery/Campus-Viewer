@@ -82,3 +82,6 @@ source_records 保留被使用的原始行。condition_sets 按 ID 保存**行�
 索引保留所有原始入口及来源，网页角色目录按 script_id 选择一个入口。亲密度入口优先，STEP 分组优先于无分组入口；其他同脚本入口优先保留有明确培养模式的记录。章节仍保存全部来源。角色卡、亲密度 STEP、培养主剧情维持原分组；其他角色剧情按类别合并。
 
 外出、营业和校园事件通过 ProduceStepEventDetail 的选项列表及 ProduceStepEventSuggestion 的 stepId/successStepId/failStepId 连接到后续事件，继承明确父事件的培养模式；不依据文件名后缀猜测关联。多模式引用全部保留，循环跳转不会无限遍历。
+
+
+多人共用的培养脚本归入 `other.training_shared`：同一 script_id 的培养入口有两个或以上明确关联角色即可，不要求覆盖完整偶像名单，也不按标题相同判定。角色卡与亲密度不应用此规则。原分类写入 `context.original_category_id`，适用角色集合写入 `context.shared_character_ids`，原始来源和角色关联保留。其他剧情目录也按脚本去重；有明确培养模式的共通主剧情保留模式分组，共用校园脚本合并为“培养校园剧情”。

@@ -196,6 +196,12 @@ class WebExportTests(unittest.TestCase):
             data=json.loads(path.read_text()); rows=data if isinstance(data,list) else data['entries']
             self.assertEqual({r['group_id'] for r in rows},{'first','nia'})
 
+    def test_shared_training_directory_deduplicates_across_character_sources(self):
+        rows=[{'id':str(i),'script_id':'shared','category_id':'other.training_shared','group_ids':[],'order':i} for i in range(2)]
+        chosen,sources=canonical_directory_entries(rows,{})
+        self.assertEqual(chosen,{'shared':'0'})
+        self.assertEqual(sources['shared'],['0','1'])
+
     def test_toolkit_card_dimensions(self):
         self.assertEqual(display_size('img_general_cidol-test_0-full'), (1440, 2560))
         self.assertEqual(display_size('img_general_csprt-test_full'), (2560, 1440))

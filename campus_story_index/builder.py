@@ -462,6 +462,21 @@ class CatalogBuilder:
                     self.membership(child, gid, self.register('ProduceStepEventSuggestion', choice), field)
                     changed = True
 
+    def classify_shared_training(self):
+        """Shared by explicit role references, not by a roster-size threshold."""
+        for entries in self.by_script.values():
+            training = [e for e in entries if e['category_id'].startswith('character.training_')]
+            if not training:
+                continue
+            chars = sorted({cid for e in training for cid in e['character_ids']})
+            if len(chars) < 2:
+                continue
+            for entry in training:
+                entry['context']['original_category_id'] = entry['category_id']
+                entry['context']['shared_character_ids'] = chars
+                entry['category_id'] = 'other.training_shared'
+                entry['classification_basis'] = 'shared_script' if len(training) > 1 else 'explicit_relation'
+
     def refine(self):
         for entry in self.entries.values():
             hints = self.category_hints[entry['id']]
@@ -504,6 +519,7 @@ class CatalogBuilder:
                         entry['classification_basis'] = 'filename_hint'
                 if entry['category_id'] == 'other.unclassified':
                     self.warn('unclassified_entry', entry_id=entry['id'])
+        self.classify_shared_training()
         for entry in self.entries.values():
             for key in ['character_ids', 'inferred_character_ids', 'idol_card_ids', 'support_card_ids', 'produce_mode_ids', 'group_ids']:
                 entry[key] = sorted(set(entry[key]))
