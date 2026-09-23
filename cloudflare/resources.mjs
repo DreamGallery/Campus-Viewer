@@ -11,6 +11,27 @@ export function resources(env) {
     if (!obj) throw error(404);
     return obj.text();
   }
+  // Immutable per-release maps; bound memory and retain legacy direct-object reads.
+  const maps = new Map();
+  async function resolveFile(key) {
+    safe(key);
+    const match = /^releases\/([^/]+)\/(web\/.*|story\/.*|adv\/.*)$/.exec(key);
+    if (!match) return key;
+    const release = match[1];
+    if (!maps.has(release)) {
+      const obj = await bucket.get(prefix+'/releases/'+release+'/file-map.json');
+      // Do not cache a miss: the updater may still be publishing this release.
+      if (!obj) return key;
+      const map = JSON.parse(await obj.text());
+      if (map.schema_version !== 1 || !map.files) throw error(503);
+      maps.set(release, map.files);
+      while (maps.size > 2) maps.delete(maps.keys().next().value);
+    }
+    const target = maps.get(release)[match[2]];
+    if (!target) throw error(404);
+    if (!/^text\/[a-f0-9]{64}\/[^/]+$/.test(target) && !/^releases\/[^/]+\/(story|adv)\/.+/.test(target)) throw error(503);
+    return safe(target);
+  }
   async function current() {
     try { return JSON.parse(await text('current.json')); }
     catch(e) { if(e.status === 404) return null; throw e; }
@@ -27,11 +48,11 @@ export function resources(env) {
       if(root !== 'releases/'+catalog[1]+'/web') throw error(400);
       relative = 'catalog/'+catalog[2];
     }
-    return text(safe(root)+'/'+safe(relative));
+    return text(await resolveFile(safe(root)+'/'+safe(relative)));
   }
   async function stream(request, key, download=false, immutable=false) {
     const headers = new Headers({'X-Content-Type-Options':'nosniff','Cache-Control':immutable?'public, max-age=31536000, immutable':'no-store','Accept-Ranges':'bytes'});
-    const fullKey = prefix+'/'+safe(key);
+    const fullKey = prefix+'/'+await resolveFile(safe(key));
     const head = await bucket.head(fullKey); if(!head) throw error(404);
     head.writeHttpMetadata(headers); headers.set('ETag',head.httpEtag);
     headers.set('Cache-Control',immutable?'public, max-age=31536000, immutable':'no-store');

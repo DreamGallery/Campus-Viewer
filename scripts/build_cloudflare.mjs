@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 const publicDir = '.wrangler/ui-public';
 await rm(publicDir,{recursive:true,force:true});
 await mkdir(publicDir,{recursive:true});
-for(const name of ['theme-init.js','images/icon','images/filters','images/official','images/img_pattern_artdeco.png','images/bg_character_standing.png','fonts']) {
+for(const name of ['favicon.svg','theme-init.js','images/icon','images/filters','images/official','images/img_pattern_artdeco.png','images/bg_character_standing.png','fonts']) {
   await cp('public/'+name,publicDir+'/'+name,{recursive:true});
 }
 const result=spawnSync('npm',['run','build'],{stdio:'inherit',env:{...process.env,CAMPUS_CLOUDFLARE_BUILD:'1'}});

@@ -77,3 +77,24 @@ test('actual Workers runtime serves SPA, Node API, R2 text, OAuth state and logo
     assert.equal(logout.status,200);assert.equal(await sessions.get('test-cookie'),undefined);
   } finally {await harness.close();}
 });
+
+
+test('content-addressed release maps serve CSV, TXT and catalog; older releases still work',()=>fixture(async bucket=>{
+  const data=resources({RESOURCES:bucket,CAMPUS_R2_PREFIX:'mapped'});
+  const csv='text/'+'a'.repeat(64)+'/demo.csv', txt='text/'+'b'.repeat(64)+'/demo.txt', catalog='text/'+'c'.repeat(64)+'/manifest.json';
+  await bucket.put('mapped/'+csv,'name,text\n咲季,你好');
+  await bucket.put('mapped/'+txt,'original script');
+  await bucket.put('mapped/'+catalog,'{"base_path":"/catalog/releases/new/builds/x"}');
+  await bucket.put('mapped/releases/new/file-map.json',JSON.stringify({schema_version:1,files:{'story/CSV/demo.csv':csv,'adv/demo.txt':txt,'web/catalog/manifest.json':catalog,'story/CSV/legacy.csv':'releases/old/story/CSV/demo.csv','story/CSV/bad.csv':'../secret'}}));
+  await bucket.put('mapped/current.json',JSON.stringify({release:'new',versions:{revision:62,versions:[]}}));
+  const roots=await data.sourceRoots();
+  assert.equal(await data.readFile(roots.story,'CSV/demo.csv'),'name,text\n咲季,你好');
+  assert.equal(await data.readFile(roots.adv,'demo.txt'),'original script');
+  const res=await data.route(new Request('https://site.test/catalog/manifest.json'));
+  assert.equal(res.status,200);assert.equal((await res.json()).base_path,'/catalog/releases/new/builds/x');
+  await assert.rejects(()=>data.readFile(roots.story,'CSV/absent.csv'),{status:404});
+  await assert.rejects(()=>data.readFile(roots.story,'CSV/bad.csv'),{status:503});
+  await bucket.put('mapped/releases/old/story/CSV/demo.csv','legacy');
+  assert.equal(await data.readFile('releases/old/story','CSV/demo.csv'),'legacy');
+  assert.equal(await data.readFile(roots.story,'CSV/legacy.csv'),'legacy');
+}));

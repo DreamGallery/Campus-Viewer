@@ -1,6 +1,6 @@
 # Cloudflare Workers + R2 + Docker 更新器部署
 
-本文对应本地分支 `codex/cloudflare-r2`。原有 `deploy/compose.yaml` 完整 Docker 部署仍然有效。不要同时向同一 R2 前缀运行多个更新器。
+本文对应分支 `codex/cloudflare-r2`。原有 `deploy/compose.yaml` 完整 Docker 部署仍然有效。不要同时向同一 R2 前缀运行多个更新器。
 
 ## 1. 结构与数据流
 
@@ -216,7 +216,7 @@ npm run build:cloudflare
 npx wrangler deploy --config wrangler.local.jsonc
 ```
 
-Wrangler 部署只上传本地构建到 Cloudflare，**不需要先推送 GitHub，也不会推送 Git 分支**。本阶段不要启用自动 Git 部署，等远端联调完成再决定合并/推送。
+Wrangler 部署只上传本地构建到 Cloudflare，**不需要先推送 GitHub，也不会推送 Git 分支**。如启用 Git 自动部署，请明确选择混合部署分支。
 
 若使用自定义域名，可在 Cloudflare Worker 的 Settings → Domains & Routes 添加，并同步更新 OAuth App 和 `CAMPUS_PUBLIC_ORIGIN`。可以使用独立测试站点与测试前缀，避免测试污染正式发布。
 
@@ -255,7 +255,7 @@ Mac 仓库根目录执行，使用自己的 Docker Hub 仓库及唯一版本号�
 
 ```sh
 docker login
-sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20260922-cf2 linux/amd64
+sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20260923-cf5 linux/amd64
 ```
 
 构建过程不需要 R2 密钥。`.dockerignore` 的白名单与 Dockerfile 的显式 COPY 会排除实际环境文件和下载资源。脚本逐架构验证 Python 依赖、解码器和入口后，只推送指定版本标签，不覆盖 latest，不改变当前 Docker context。跨架构仿真编译首次可能较慢。
@@ -263,7 +263,7 @@ sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20260922-cf2 
 NAS 需要 Compose 和 R2 配置，另可用 `.env` 覆盖镜像版本，放在同一目录：
 
 - `deploy/nas/docker-compose.yaml` → `docker-compose.yaml`
-- 可选：`deploy/nas/.env.example` → `.env`，覆盖镜像版本或固定 digest；默认使用 `dreamgallery/campus-r2-updater:20260922-cf2`。
+- 可选：`deploy/nas/.env.example` → `.env`，覆盖镜像版本或固定 digest；默认使用 `dreamgallery/campus-r2-updater:20260923-cf5`。
 - 已填好的 `deploy/.env.r2.local` → `.env.r2.local`，单独传输，不要放到 Docker Hub。
 
 在 NAS 上执行：
@@ -286,4 +286,29 @@ Compose 使用 `campus-r2-updater_runtime` 命名卷，与默认的源码构建�
 
 构建时如果默认 Debian 线路较慢，可设置 `CAMPUS_DEBIAN_MIRROR=https://mirrors.ustc.edu.cn` 再运行发布脚本，软件包签名校验保持启用。该参数只影响镜像构建，不需要放入 NAS 的 R2 环境文件。
 
-Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple` 指定镜像；默认仍使用 PyPI 官方源。首个 NAS 版本为 `dreamgallery/campus-r2-updater:20260922-cf2`（linux/amd64），已在该镜像内通过 72 项回归测试、真实 ACB 解码及 R2 连接验证。
+Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple` 指定镜像；默认仍使用 PyPI 官方源。当前 NAS 镜像为 `dreamgallery/campus-r2-updater:20260923-cf5`（linux/amd64）。
+
+
+### R2 上传进度
+
+通过 `docker compose logs -f updater` 查看。图片与语音、文本与索引、增量资源包、版本信息分别统计；每个阶段开始、结束以及运行期间每 10 秒输出一次进度。日志包含已处理文件数、比例、已上传数、校验一致而跳过的文件数、失败数、本轮传输 MiB 和耗时。大文件上传或请求重试期间也会持续输出。
+
+百分比按文件数计算（包含跳过和失败），不是字节比例；100% 不代表发布成功，应以最后的 `R2: 发布完成` 为准。传输量来自 SDK 回调，不含跳过的资源。发布前扫描和计算媒体校验值会先显示提示。
+
+升级 NAS 时，将现有 Compose 的镜像或 `.env` 中 `CAMPUS_UPDATER_IMAGE` 改为 `dreamgallery/campus-r2-updater:20260923-cf5`，然后执行 `docker compose pull updater` 和 `docker compose up -d updater`。保留原有挂载路径、内存限制和环境配置。
+
+更新器还会输出每轮检查开始、各处理阶段及下次检查时间（UTC）；成功后默认等待 6 小时，失败后最多等待 15 分钟重试。
+
+
+### 远端媒体批量检查
+
+远端媒体检查使用分页列举专用 `campus-v1/media/` 前缀，每页最多 1000 项。已有媒体按路径中的 SHA-256 和文件大小匹配后跳过；大小冲突会停止发布。依赖该前缀由更新器管理且对象不被外部覆盖，不将 S3 ETag 当作内容哈希。未列出的媒体仍执行 HEAD 校验再上传；文本与索引的增量处理见下一节，资源包保持原有校验。需要 R2 列举对象权限（标准桶对象读写令牌包含）。本地媒体 SHA-256 扫描仍保留，因此首次扫描时间取决于磁盘速度。
+
+
+### 文本增量发布与无变化跳过
+
+每轮仍先拉取四个源仓库并获取游戏资源清单。根据仓库 HEAD、完整资源清单、更新器 Python 代码及 CAMPUS 配置生成摘要；仅在上次成功发布的摘要一致时跳过索引构建、解包和 R2 发布。CSV/ADV 仓库单独更新也会触发处理，不依赖游戏 revision 改变。首次升级没有摘要会正常运行一次。可临时设置 `CAMPUS_FORCE_UPDATE=1` 强制运行，完成后移除。
+
+文本与索引采用 `text/<SHA-256>/<文件名>` 保存，发布目录中的 `file-map.json` 映射逻辑路径。未变化的 CSV/TXT 复用上一成功版本（也支持旧版直接路径），其他文件根据内容批量比对后跳过。索引包含版本链接时仍需上传相应变更；失败不会切换 current.json。不要手动删除仍被映射引用的旧发布目录或 text 对象。
+
+必须先部署本版兼容映射读取的 Workers，再升级镜像 `dreamgallery/campus-r2-updater:20260923-cf5`；Workers 同时支持 cf4 及更早的目录布局。NAS 继续保留现有挂载、限制与密钥配置，修改镜像后 pull/up 即可。

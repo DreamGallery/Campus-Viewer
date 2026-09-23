@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import time
+from threading import Event, Lock, Thread
 
 
 def settings():
@@ -46,6 +47,67 @@ def digest(path):
     return h.hexdigest()
 
 
+class UploadProgress:
+    """Thread-safe counters plus a heartbeat even while a request is retrying."""
+    def __init__(self, label, total):
+        self.label, self.total = label, total
+        self.uploaded = self.skipped = self.failed = self.bytes = 0
+        self.lock = Lock()
+        self.stop = Event()
+        self.started = time.monotonic()
+
+    def transferred(self, count):
+        with self.lock:
+            self.bytes += count
+
+    def finish(self, status):
+        with self.lock:
+            setattr(self, status, getattr(self, status) + 1)
+
+    def report(self):
+        with self.lock:
+            done = self.uploaded + self.skipped + self.failed
+            percent = done / self.total * 100 if self.total else 100
+            print(f'R2 [{self.label}] {done}/{self.total} ({percent:.1f}%) '
+                  f'已上传={self.uploaded} 已跳过={self.skipped} 失败={self.failed} '
+                  f'本轮传输={self.bytes / 1048576:.1f} MiB '
+                  f'耗时={time.monotonic() - self.started:.0f}s', flush=True)
+
+    def heartbeat(self):
+        while not self.stop.wait(10):
+            self.report()
+
+    def __enter__(self):
+        self.report()
+        self.thread = Thread(target=self.heartbeat, daemon=True)
+        self.thread.start()
+        return self
+
+    def __exit__(self, *args):
+        self.stop.set()
+        self.thread.join()
+        self.report()
+
+
+def list_media(s3, bucket, prefix, namespace="media"):
+    """Inventory only our immutable, content-addressed media namespace."""
+    print(f'R2: 批量读取远端 {namespace} 清单', flush=True)
+    result = {}
+    pages = 0
+    media_prefix = prefix + '/' + namespace + '/'
+    for page in s3.get_paginator('list_objects_v2').paginate(
+            Bucket=bucket, Prefix=media_prefix, PaginationConfig={'PageSize': 1000}):
+        for item in page.get('Contents', []):
+            key = item['Key']
+            if key.startswith(media_prefix):
+                result[key[len(prefix) + 1:]] = item['Size']
+        pages += 1
+        if pages == 1 or pages % 10 == 0:
+            print(f'R2: 远端 {namespace} 清单 {pages} 页 / {len(result)} 个文件', flush=True)
+    print(f'R2: 远端 {namespace} 清单读取完成 {pages} 页 / {len(result)} 个文件', flush=True)
+    return result
+
+
 def publish_release(root, release, s3=None):
     bucket, prefix = settings()
     s3 = s3 or client()
@@ -58,19 +120,44 @@ def publish_release(root, release, s3=None):
     if previous and local_current.exists() and previous['release'] not in (local_current.resolve().name, release):
         raise RuntimeError('Remote and local releases differ; another updater or rollback requires reconciliation')
     versions = json.loads((stage / 'resource-versions.json').read_text())
-    def upload(path, key):
+    remote_media = list_media(s3, bucket, prefix)
+    remote_media.update(list_media(s3, bucket, prefix, 'text'))
+    def upload(path, key, progress):
         from botocore.exceptions import ClientError
-        sha = key.split('/')[1] if key.startswith('media/') else digest(path)
+        sha = key.split('/')[1] if key.startswith(('media/', 'text/')) else digest(path)
+        if key.startswith(('media/', 'text/')) and key in remote_media:
+            # The SHA-256 is part of the immutable object key, not the multipart ETag.
+            if remote_media[key] != path.stat().st_size:
+                raise RuntimeError('Immutable media size mismatch')
+            return 'skipped'
         try:
             head = s3.head_object(Bucket=bucket, Key=prefix+'/'+key)
-            if head.get('Metadata', {}).get('sha256') == sha: return
+            if head.get('Metadata', {}).get('sha256') == sha: return 'skipped'
             raise RuntimeError('Immutable object collision: ' + key)
         except ClientError as exc:
             if str(exc.response['Error']['Code']) not in ('404', 'NoSuchKey', 'NotFound'): raise
-        s3.upload_file(str(path), bucket, prefix+'/'+key, ExtraArgs={
+        s3.upload_file(str(path), bucket, prefix+'/'+key, Callback=progress.transferred, ExtraArgs={
             'ContentType': 'application/gzip' if key.startswith('downloads/') else (mimetypes.guess_type(path.name)[0] or 'application/octet-stream'),
             **({'ContentDisposition': 'attachment; filename="'+path.name+'"'} if key.startswith('downloads/') else {}),
             'CacheControl': 'no-store' if key.startswith('downloads/') else 'public, max-age=31536000, immutable', 'Metadata': {'sha256': sha}})
+        return 'uploaded'
+
+    def batch(label, jobs, workers=None):
+        workers = workers or max(1, min(8, int(os.getenv('CAMPUS_UPLOAD_WORKERS', '4'))))
+        with UploadProgress(label, len(jobs)) as progress:
+            def process(job):
+                try:
+                    progress.finish(upload(*job, progress))
+                except Exception as exc:
+                    progress.finish('failed')
+                    # Do not log exception messages: SDK errors may contain credentials or URLs.
+                    print(f'R2 [{label}] 文件上传失败: {type(exc).__name__}', flush=True)
+                    raise
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                for _ in pool.map(process, jobs):
+                    pass
+
+    print('R2: 正在扫描图片和语音并计算校验值', flush=True)
     public_base = os.getenv('CAMPUS_R2_PUBLIC_BASE_URL', '').rstrip('/')
     if public_base and not public_base.startswith('https://'): raise ValueError('Public resource base must use HTTPS')
     media = {}
@@ -83,8 +170,7 @@ def publish_release(root, release, s3=None):
             key = 'media/' + digest(path) + '/' + path.name
             media[url + path.relative_to(base).as_posix()] = (public_base + '/' + prefix if public_base else '') + '/' + key
             jobs.append((path, key))
-    with ThreadPoolExecutor(max_workers=max(1, min(8, int(os.getenv('CAMPUS_UPLOAD_WORKERS', '4'))))) as pool:
-        list(pool.map(lambda job: upload(*job), jobs))
+    batch('图片与语音', jobs)
     def rewrite(value):
         if isinstance(value, list): return [rewrite(v) for v in value]
         if isinstance(value, dict): return {k: rewrite(v) for k, v in value.items()}
@@ -101,24 +187,47 @@ def publish_release(root, release, s3=None):
     if not build.resolve().is_relative_to(catalog.resolve()): raise ValueError('Invalid catalog base_path')
     files = [catalog / 'manifest.json'] + sorted(build.rglob('*.json'))
     text_jobs = []
+    file_map = {}
+    previous_map = None
+    if previous:
+        previous_map, _ = get_json(s3, bucket, prefix + '/releases/' + previous['release'] + '/file-map.json')
+    def add_text(path, relative):
+        # Reuse already-published legacy CSV/TXT on the first upgrade as well.
+        old = root / 'releases' / previous['release'] / relative if previous else None
+        if relative.startswith(('story/', 'adv/')) and old and old.is_file() and digest(old) == digest(path):
+            old_key = (previous_map or {}).get('files', {}).get(relative) if previous_map else 'releases/' + previous['release'] + '/' + relative
+            if old_key:
+                file_map[relative] = old_key
+                return
+        key = 'text/' + digest(path) + '/' + path.name
+        file_map[relative] = key
+        text_jobs.append((path, key))
     for source in files:
         relative = source.relative_to(stage)
         out = temp / relative
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(rewrite(json.loads(source.read_text())), ensure_ascii=False, separators=(',', ':')))
-        text_jobs.append((out, 'releases/' + release + '/' + relative.as_posix()))
+        add_text(out, relative.as_posix())
     for folder, suffix in [('story', '.csv'), ('adv', '.txt')]:
         for path in sorted((stage / folder).rglob('*')):
             if path.is_file() and not path.is_symlink() and path.suffix.lower() == suffix:
-                text_jobs.append((path, 'releases/' + release + '/' + path.relative_to(stage).as_posix()))
-    with ThreadPoolExecutor(max_workers=max(1, min(8, int(os.getenv('CAMPUS_UPLOAD_WORKERS', '4'))))) as pool:
-        list(pool.map(lambda job: upload(*job), text_jobs))
+                add_text(path, path.relative_to(stage).as_posix())
+    print(f'R2: 复用上版文本 {len(file_map) - len(text_jobs)} 个，其余按内容校验', flush=True)
+    batch('文本与索引', list(dict.fromkeys(text_jobs)))
+    map_path = temp / 'file-map.json'
+    map_path.write_text(json.dumps({'schema_version': 1, 'files': file_map}, ensure_ascii=False, separators=(',', ':')))
+    batch('文件映射', [(map_path, 'releases/' + release + '/file-map.json')], workers=1)
+    archive_jobs = []
     for version in versions['versions']:
         name = version['filename']
         if not re.fullmatch(r'campus-resources-r[0-9]+-[a-f0-9]{12}\.tar\.gz', name): raise ValueError('Invalid archive filename')
-        upload(root / 'downloads' / name, 'downloads/' + name)
+        archive_jobs.append((root / 'downloads' / name, 'downloads/' + name))
+    batch('增量资源包', archive_jobs, workers=1)
+    metadata_jobs = []
     for name in ['resource-snapshot.json', 'resource-versions.json']:
-        upload(stage / name, 'releases/' + release + '/' + name)
+        metadata_jobs.append((stage / name, 'releases/' + release + '/' + name))
+    batch('版本信息', metadata_jobs, workers=1)
+    print('R2: 正在切换已发布版本', flush=True)
     pointer = {'schema_version': 1, 'release': release, 'published_at': int(time.time()), 'versions': versions}
     # Conditional publication rejects competing updaters, including the first publication.
     condition = {'IfMatch': previous_etag} if previous_etag else {'IfNoneMatch': '*'}
@@ -132,6 +241,7 @@ def publish_release(root, release, s3=None):
         if name not in retained and re.fullmatch(r'campus-resources-r[0-9]+-[a-f0-9]{12}\.tar\.gz', name):
             try: s3.delete_object(Bucket=bucket, Key=prefix+'/downloads/'+name)
             except Exception: print('R2 archive cleanup deferred; publication succeeded', flush=True)
+    print(f'R2: 发布完成 {release}', flush=True)
     return pointer
 
 

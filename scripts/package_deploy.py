@@ -9,7 +9,7 @@ def package(output):
     allowed = ['README.md', '.gitignore', '.dockerignore', '.env.oauth.example',
                'campus_story_index', 'docker', 'deploy', 'docs', 'tests', 'scripts',
                'requirements.txt', 'requirements-audio.txt', 'requirements-assets.txt', 'requirements-dev.txt', 'requirements-r2.txt', 'cloudflare', 'wrangler.jsonc', '.dev.vars.example',
-               'src', 'server', 'public/theme-init.js', 'public/images/icon', 'public/images/filters',
+               'src', 'server', 'public/favicon.svg', 'public/theme-init.js', 'public/images/icon', 'public/images/filters',
                'public/images/official', 'public/images/img_pattern_artdeco.png',
                'public/images/bg_character_standing.png', 'public/fonts',
                'package.json', 'package-lock.json', 'Dockerfile', 'index.html', 'vite.config.ts',

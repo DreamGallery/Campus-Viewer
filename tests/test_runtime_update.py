@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from campus_story_index.runtime_update import publish, update
+from campus_story_index.runtime_update import publish, update, input_signature
 
 
 class RuntimeUpdateTests(unittest.TestCase):
@@ -51,3 +51,19 @@ class RuntimeUpdateTests(unittest.TestCase):
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 with patch('campus_story_index.runtime_update.sync_repo') as sync:
                     self.assertFalse(update(root)); sync.assert_not_called()
+
+    def test_unchanged_inputs_skip_build_and_publish(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder); saved=root/'releases/old'; saved.mkdir(parents=True)
+            (saved/'update-inputs.json').write_text('{"signature":"same"}')
+            (root/'current').symlink_to(saved)
+            with patch('campus_story_index.runtime_update.sync_repo'), patch('campus_story_index.runtime_update.fetch_manifest',return_value={'revision':62}), patch('campus_story_index.runtime_update.input_signature',return_value='same'), patch('campus_story_index.runtime_update.command') as command, patch('campus_story_index.runtime_update.publish') as pub:
+                self.assertTrue(update(root));command.assert_not_called();pub.assert_not_called()
+            self.assertEqual(json.loads((root/'status.json').read_text())['state'],'ready')
+
+    def test_commit_or_manifest_change_changes_signature(self):
+        with patch('campus_story_index.runtime_update.subprocess.check_output',return_value=b'commit-a'):
+            first=input_signature(Path('/fake'),{'revision':62})
+            self.assertNotEqual(first,input_signature(Path('/fake'),{'revision':63}))
+        with patch('campus_story_index.runtime_update.subprocess.check_output',return_value=b'commit-b'):
+            self.assertNotEqual(first,input_signature(Path('/fake'),{'revision':62}))

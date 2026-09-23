@@ -78,3 +78,15 @@ logs/
 !.dev.vars.example
 wrangler.local.jsonc
 .cloudflare-dist/
+
+# Local diagnostics, browser test output and private configuration backups
+playwright-report/
+test-results/
+blob-report/
+.nyc_output/
+*.bak
+*.orig
+*.rej
+*.local.*
+.dev.vars*
+!.dev.vars.example
