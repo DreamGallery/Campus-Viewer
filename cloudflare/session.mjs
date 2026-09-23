@@ -9,8 +9,15 @@ export function sessionStore(db, secret, namespace) {
   }
   async function decode(row) {
     if (!row) return undefined;
-    const bytes = Uint8Array.from(atob(row.value), c => c.charCodeAt(0));
-    return JSON.parse(dec.decode(await crypto.subtle.decrypt({name:'AES-GCM', iv:bytes.slice(0,12), additionalData:enc.encode(namespace)}, await key(), bytes.slice(12))));
+    const encryptionKey = await key(); // Configuration errors must still surface.
+    try {
+      const bytes = Uint8Array.from(atob(row.value), c => c.charCodeAt(0));
+      return JSON.parse(dec.decode(await crypto.subtle.decrypt({name:'AES-GCM', iv:bytes.slice(0,12), additionalData:enc.encode(namespace)}, encryptionKey, bytes.slice(12))));
+    } catch (error) {
+      // Rotated keys or malformed stored sessions require a fresh login, not a 500.
+      if (['OperationError', 'InvalidCharacterError', 'SyntaxError'].includes(error.name)) return undefined;
+      throw error;
+    }
   }
   return {
     async get(id) {

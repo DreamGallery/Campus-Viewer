@@ -6,6 +6,7 @@ const origin = 'http://127.0.0.1:5173';
 async function fixture(t, extra = async () => new Response('{}', {status:404}), push = true) {
   const calls=[];
   const app=createApp({GITHUB_CLIENT_ID:'test-id',GITHUB_CLIENT_SECRET:'test-secret',CAMPUS_PUBLIC_ORIGIN:origin},async (url, opts) => {
+    assert.equal(opts.redirect,'manual', 'GitHub requests must use the Workers-compatible non-following redirect mode');
     calls.push([url,opts]);
     if(url.endsWith('/access_token')) return Response.json({access_token:'private-token',expires_in:28800});
     if(url==='https://api.github.com/repos/chihya72/gakumas-translation-work') return Response.json({permissions:{push}});

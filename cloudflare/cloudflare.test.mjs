@@ -17,6 +17,11 @@ test('D1 encrypted sessions survive new store instances; OAuth consumption is at
   const raw=await db.prepare('SELECT * FROM auth_state').first();
   assert.notEqual(raw.id,'cookie-id');assert.ok(!raw.value.includes('private-github-token'));
   assert.equal((await b.get('cookie-id')).token,'private-github-token');
+  const rotated=sessionStore(db,'new-secret-'.repeat(4),'session');
+  assert.equal(await rotated.get('cookie-id'),undefined);
+  await assert.rejects(()=>sessionStore(db,'short','session').get('cookie-id'),/SESSION_SECRET/);
+  await db.prepare('UPDATE auth_state SET value=? WHERE namespace=?').bind('invalid-base64!', 'session').run();
+  assert.equal(await a.get('cookie-id'),undefined);
   await b.delete('cookie-id');assert.equal(await a.get('cookie-id'),undefined);
   await a.set('expired',{expires:1});assert.equal(await b.get('expired'),undefined);
   const oauth=sessionStore(db,secret,'oauth');await oauth.set('state',{expires:Date.now()+60000});
