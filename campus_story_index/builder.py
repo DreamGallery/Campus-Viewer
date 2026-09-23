@@ -26,6 +26,7 @@ COMPOSITE_KEYS = {
 REQUIRED_TABLES = [
     'Story', 'ProduceStory', 'Character', 'CharacterAdv', 'CharacterDearnessLevel',
     'CharacterProduceStory', 'ProduceStoryGroup', 'IdolCard', 'SupportCard', 'StoryGroup',
+    'ProduceStepEventDetail', 'ProduceStepEventSuggestion',
     'StoryEvent', 'MainStoryPart', 'MainStoryChapter', 'ProduceGroup', 'ConditionSet',
 ]
 CONDITION_NAMES = {
@@ -429,12 +430,37 @@ class CatalogBuilder:
                 }
             self.link_list('ProduceStoryGroup', row, 'produceStoryId', 'ProduceStory', family)
             self.link_list('ProduceStoryGroup', row, 'produceStoryId', 'ProduceStory', 'character:' + row['characterId'])
+        self.link_event_branches()
         for entry in self.entries.values():
             for gid in list(entry['produce_mode_ids']):
                 self.membership(entry, gid, entry['source_record_id'], 'produce_context')
             for cid in set(entry['character_ids']):
                 if 'character:' + cid not in entry['group_ids']:
                     self.membership(entry, 'character:' + cid, entry['source_record_id'], 'character_context')
+
+    def link_event_branches(self):
+        """Follow explicit event choices; never infer continuations from filenames."""
+        details = {row['id']: row for row in self.rows('ProduceStepEventDetail')}
+        suggestions = {row['id']: row for row in self.rows('ProduceStepEventSuggestion')}
+        edges = []
+        for detail in details.values():
+            parent = self.entries.get('ProduceStory:' + detail.get('produceStoryId', '') + '/advAssetId')
+            if not parent:
+                continue
+            for ident in detail.get('produceStepEventSuggestionIds', []):
+                choice = suggestions.get(ident, {})
+                for field in ('stepId', 'successStepId', 'failStepId'):
+                    target = details.get(choice.get(field))
+                    child = self.entries.get('ProduceStory:' + target.get('produceStoryId', '') + '/advAssetId') if target else None
+                    if child and child['category_id'] == parent['category_id'] and child['category_id'] in ('character.training_activity', 'character.training_business', 'character.training_school'):
+                        edges.append((parent, child, choice, field))
+        changed = True
+        while changed:
+            changed = False
+            for parent, child, choice, field in edges:
+                for gid in sorted(set(parent['produce_mode_ids']) - set(child['produce_mode_ids'])):
+                    self.membership(child, gid, self.register('ProduceStepEventSuggestion', choice), field)
+                    changed = True
 
     def refine(self):
         for entry in self.entries.values():

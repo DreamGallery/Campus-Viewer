@@ -208,3 +208,24 @@ class IndexerTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class EventBranchTests(unittest.TestCase):
+    def test_explicit_choices_propagate_modes_and_terminate_cycles(self):
+        builder=CatalogBuilder.__new__(CatalogBuilder)
+        category='character.training_activity'
+        def entry(name,modes):return {'id':name,'category_id':category,'produce_mode_ids':modes}
+        builder.entries={'ProduceStory:a/advAssetId':entry('a',['first','nia']), 'ProduceStory:b/advAssetId':entry('b',[]), 'ProduceStory:c/advAssetId':entry('c',[])}
+        tables={'ProduceStepEventDetail':[{'id':'a','produceStoryId':'a','produceStepEventSuggestionIds':['choice-a']},{'id':'b','produceStoryId':'b','produceStepEventSuggestionIds':['choice-b']}],
+                'ProduceStepEventSuggestion':[{'id':'choice-a','successStepId':'b'},{'id':'choice-b','failStepId':'a'}]}
+        builder.rows=lambda name:tables[name]
+        builder.register=lambda table,row:table+':'+row['id']
+        calls=[]
+        def membership(child,gid,source,field):
+            child['produce_mode_ids'].append(gid);calls.append((child['id'],source,field))
+        builder.membership=membership
+        builder.link_event_branches()
+        self.assertEqual(builder.entries['ProduceStory:b/advAssetId']['produce_mode_ids'],['first','nia'])
+        self.assertEqual(builder.entries['ProduceStory:c/advAssetId']['produce_mode_ids'],[])
+        self.assertEqual(len(calls),2)
+        self.assertEqual(calls[0][2],'successStepId')

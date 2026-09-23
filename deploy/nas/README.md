@@ -1,6 +1,6 @@
 # Debian / NAS：从 Docker Hub 运行资源更新器
 
-镜像：`dreamgallery/campus-r2-updater:20260923-cf5`，架构 `linux/amd64`。
+镜像：`dreamgallery/campus-r2-updater:20260923-cf6`，架构 `linux/amd64`。
 
 1. 将 `docker-compose.yaml` 放入 NAS 的专用目录。
 2. 将已经填写的 `.env.r2.local` 单独复制到同一目录，执行 `chmod 600 .env.r2.local`。不要将它上传 Docker Hub 或 GitHub。

@@ -149,6 +149,53 @@ class WebExportTests(unittest.TestCase):
         self.assertEqual(chosen[base['script_id']], 'step')
         self.assertEqual(len(sources[base['script_id']]), 3)
 
+    def test_character_duplicates_prefer_dearness_and_explicit_modes(self):
+        groups={'step':{'kind':'story_group'},'nia':{'kind':'produce_mode'}}
+        rows=[]
+        for script,category in [('dear','dearness'),('live','live'),('business','training_business')]:
+            rows.extend([{'id':script+'-raw','script_id':script,'category_id':'character.'+category,'group_ids':[],'order':0},
+                         {'id':script+'-group','script_id':script,'category_id':'character.'+category,'group_ids':['step' if script=='dear' else 'nia'],'order':1}])
+        rows.append({'id':'stage','script_id':'dear','category_id':'character.training_stage','group_ids':['nia'],'order':0})
+        chosen,sources=canonical_directory_entries(rows,groups)
+        self.assertEqual(chosen,{'dear':'dear-group','live':'live-group','business':'business-group'})
+        self.assertIn('stage',sources['dear'])
+
+    def test_character_directory_merges_type_but_keeps_chapter_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root,args=self.fixture(directory)
+            catalog=json.loads((root/'catalog.json').read_text())
+            catalog['categories']=[{'id':'character','name':'角色剧情','parent_id':None},{'id':'character.live','name':'Live 前后剧情','parent_id':'character'}]
+            for entry in catalog['entries']:entry['category_id']='character.live'
+            atomic_write(root/'catalog.json',catalog)
+            atomic_write(root/'voices.json',{'sources':{'catalog_sha256':hashlib.sha256((root/'catalog.json').read_bytes()).hexdigest()},'scripts':[]})
+            result=build(*args)
+            folder=root/'output/builds'/result['build_id']
+            chapter=json.loads((folder/'chapters/adv_test.json').read_text())
+            self.assertEqual(len(chapter['entries']),2)
+            files=list(folder.rglob('character.json'))
+            self.assertEqual(len(files),1)
+            data=json.loads(files[0].read_text())
+            rows=data if isinstance(data,list) else data['entries']
+            self.assertEqual(len(rows),1)
+            self.assertEqual(rows[0]['group_id'],'character.live')
+            self.assertEqual(len(rows[0]['source_entry_ids']),2)
+
+    def test_training_story_keeps_produce_mode_groups(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root,args=self.fixture(directory)
+            c=json.loads((root/'catalog.json').read_text())
+            c['categories']=[{'id':'character','name':'角色剧情','parent_id':None},{'id':'character.training_story','name':'培养主剧情','parent_id':'character'}]
+            c['groups']=[{'id':gid,'kind':'produce_mode','title':gid,'parent_id':None,'order':i,'image_asset_id':None,'source_record_id':None} for i,gid in enumerate(['first','nia'])]
+            c['scripts'].append({**c['scripts'][0],'id':'adv_second'})
+            for entry,script,gid in zip(c['entries'],['adv_test','adv_second'],['first','nia']):
+                entry.update(category_id='character.training_story',script_id=script,group_ids=[gid])
+            atomic_write(root/'catalog.json',c)
+            atomic_write(root/'voices.json',{'sources':{'catalog_sha256':hashlib.sha256((root/'catalog.json').read_bytes()).hexdigest()},'scripts':[]})
+            result=build(*args)
+            path=next((root/'output/builds'/result['build_id']).rglob('character.json'))
+            data=json.loads(path.read_text()); rows=data if isinstance(data,list) else data['entries']
+            self.assertEqual({r['group_id'] for r in rows},{'first','nia'})
+
     def test_toolkit_card_dimensions(self):
         self.assertEqual(display_size('img_general_cidol-test_0-full'), (1440, 2560))
         self.assertEqual(display_size('img_general_csprt-test_full'), (2560, 1440))

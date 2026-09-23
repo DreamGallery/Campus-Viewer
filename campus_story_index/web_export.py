@@ -16,18 +16,19 @@ from .pending_text import filename_hints
 
 
 def canonical_directory_entries(entries, groups):
-    """Deduplicate event/dearness entry points, retaining all chapter sources."""
+    """Deduplicate character/event entry points, retaining all chapter sources."""
     group_scripts = defaultdict(set)
     candidates = defaultdict(list)
     for entry in entries:
-        if entry['category_id'].startswith('event.') or entry['category_id'] == 'character.dearness':
+        if entry['category_id'].startswith(('event.', 'character.')):
             candidates[entry['script_id']].append(entry)
             for gid in entry['group_ids']:
                 if groups.get(gid, {}).get('kind') == 'story_group':
                     group_scripts[gid].add(entry['script_id'])
     def rank(entry):
         size = max((len(group_scripts[g]) for g in entry['group_ids']), default=0)
-        return (-size, entry['order'], entry['id'])
+        modes = any(groups.get(g, {}).get('kind') == 'produce_mode' for g in entry['group_ids'])
+        return (0 if entry['category_id'] == 'character.dearness' else 1, -size, -int(modes), entry['order'], entry['id'])
     return {script: sorted(rows, key=rank)[0]['id'] for script, rows in candidates.items()}, {
         script: sorted(row['id'] for row in rows) for script, rows in candidates.items()
     }
@@ -201,6 +202,7 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
         return ' / '.join(titles)
     priorities = ['idol_card', 'support_card', 'main_chapter', 'story_group', 'event', 'produce_mode', 'character', 'main_part', 'produce_story_family']
     preferred_events, event_sources = canonical_directory_entries(catalog["entries"], groups)
+    entries_by_id = {entry['id']: entry for entry in catalog['entries']}
     shards = defaultdict(list)
     chapters = defaultdict(list)
     for e in catalog['entries']:
@@ -221,12 +223,17 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
         if item['card_character_ids']:
             item['character_ids'] = sorted(set(item['character_ids']) | set(item['card_character_ids']))
         category = e['category_id'].split('.')[0]
-        deduplicate = category == 'event' or e['category_id'] == 'character.dearness'
+        deduplicate = category in ('event', 'character')
         if not deduplicate or preferred_events[e['script_id']] == e['id']:
             directory_item = {**item, 'source_entry_ids': event_sources[e['script_id']]} if deduplicate else item
+            if category == 'character':
+                related = [entries_by_id[eid] for eid in event_sources[e['script_id']]]
+                directory_item['character_ids'] = sorted(set(item['character_ids']) | {cid for entry in related for cid in (entry['character_ids'] or entry.get('inferred_character_ids', []))})
+            if category == 'character' and e['category_id'] not in ('character.dearness', 'character.idol_card', 'character.training_story'):
+                directory_item.update(group_id=e['category_id'], group_title=categories[e['category_id']]['name'], group_order=0)
             shards[category].append(directory_item)
             if category == 'character':
-                for ident in item['character_ids']:
+                for ident in directory_item['character_ids']:
                     shards['character-' + ident].append(directory_item)
         chapters[e['script_id']].append({**item, 'conditions': e['conditions'], 'context': e['context']})
     entries_by_script = defaultdict(list)

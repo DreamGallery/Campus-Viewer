@@ -75,3 +75,10 @@ source_records 保留被使用的原始行。condition_sets 按 ID 保存**行�
 资源底册扫描 masterdata 中全部 `adv_` 字面引用，排除 PhotoBackground，规范化 AssetDownload 的 `.txt`。这不能覆盖客户端动态拼接或未提取的资源；CSV 反查用于补充当前能观察到的文件。新来源表会保留为后备入口并诊断；strict 模式要求补充适配器。
 
 已知表的主键稳定；未来无明确键的表采用内容哈希后备键，并报 `unstable_source_key`。未来上游表的主键结构变化需要迁移，不能承诺任意上游修改都保持同一个入口 ID。
+
+
+## 网页目录去重与培养事件分支
+
+索引保留所有原始入口及来源，网页角色目录按 script_id 选择一个入口。亲密度入口优先，STEP 分组优先于无分组入口；其他同脚本入口优先保留有明确培养模式的记录。章节仍保存全部来源。角色卡、亲密度 STEP、培养主剧情维持原分组；其他角色剧情按类别合并。
+
+外出、营业和校园事件通过 ProduceStepEventDetail 的选项列表及 ProduceStepEventSuggestion 的 stepId/successStepId/failStepId 连接到后续事件，继承明确父事件的培养模式；不依据文件名后缀猜测关联。多模式引用全部保留，循环跳转不会无限遍历。
