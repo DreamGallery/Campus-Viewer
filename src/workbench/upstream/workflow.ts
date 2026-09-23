@@ -1006,6 +1006,38 @@ export function draftInfoOf(
   }
 }
 
+// 兼容旧的纯姓名署名，重复校对时只取译者部分，避免累积校对署名。
+export function originalTranslator(credit: string): string {
+  const match = /^翻译：(.*?)(?:；校对：.*)?$/s.exec(credit)
+  return match ? match[1] : credit
+}
+export function completionCredit(translator: string, proofreader?: string): string {
+  return `翻译：${translator}${proofreader === undefined ? '' : `；校对：${proofreader}`}`
+}
+
+// 校对稿沿用翻译正式稿的署名，不能被校对提交者或导入文件覆盖。
+export async function completionTranslator(
+  wrapper: any,
+  opts: { role: TrackKey; sourcePath: string; fileId: string; contentB64: string },
+  record: any,
+  operatorId: string
+): Promise<string> {
+  if (opts.role === 'tr' || record.direct_machine_proofread === true) return operatorId
+  try {
+    const translated = await wrapper.getContent(
+      WORK_OWNER, WORK_REPO, WORK_BRANCH,
+      completionPath(opts.sourcePath, opts.fileId, 'tr'), true
+    )
+    const name = extractInfoFromCsvText(base64ToUtf8(translated.content)).translator
+    if (name.trim()) return originalTranslator(name)
+  } catch (error: any) {
+    if (error?.response?.status !== 404) throw error
+  }
+  // 兼容正式稿缺失或未署名的旧任务，优先使用原翻译工序的记录。
+  return record.translation?.display_id || record.translation?.operator_github ||
+    originalTranslator(extractInfoFromCsvText(base64ToUtf8(opts.contentB64)).translator)
+}
+
 // 阶段完成事务：正式稿、备份、记录、校对 TXT 一次提交完成。
 // baseRevision 是打开编辑器时看到的版本；提交前比对，旧稿不能覆盖新稿。
 // 传 -1 表示放弃校验（无法确定基准版本的入口，如批量上传）。
@@ -1017,7 +1049,6 @@ export async function completeStage(
     sourcePath: string
     contentB64: string
     operatorGithub: string
-    translatorDisplay: string
     baseRevision: number
   }
 ): Promise<{ directProofread: boolean; commitSha: string }> {
@@ -1031,8 +1062,10 @@ export async function completeStage(
         `现在是第 ${current} 版）。请重新打开加载最新内容，避免覆盖对方的成果。`
     )
 
+  const { operatorQq, operatorId } = await resolveOperator(wrapper, operatorGithub)
+  const translator = await completionTranslator(wrapper, opts, record, operatorId)
   const outputPath = completionPath(sourcePath, fileId, role)
-  const stamped = stampTranslator(opts.contentB64, opts.translatorDisplay)
+  const stamped = stampTranslator(opts.contentB64, completionCredit(translator, role === 'pr' ? operatorId : undefined))
   const files: { path: string; content: string | null }[] = []
 
   // 草稿已晋升为正式稿，同一提交里删掉，避免下次打开又恢复出旧内容
@@ -1073,10 +1106,6 @@ export async function completeStage(
   // 仍然写记录（操作者可能变了，例如重做），只是 revision 保持不动。
   const idempotent = unchanged && record[key]?.state === '完成'
 
-  const { operatorQq, operatorId } = await resolveOperator(
-    wrapper,
-    operatorGithub
-  )
   const directProofread = applyRecordTrack(record, {
     role,
     state: '完成',
@@ -1091,7 +1120,7 @@ export async function completeStage(
   if (directProofread)
     files.push({
       path: completionPath(sourcePath, fileId, 'tr'),
-      content: stampTranslator(opts.contentB64, operatorId),
+      content: stampTranslator(opts.contentB64, completionCredit(operatorId)),
     })
 
   // 校对完成时生成纯中文 TXT；原文缺失就跳过，不阻断提交
@@ -1410,10 +1439,13 @@ export async function applyTrack(
   wrapper: any,
   issueNumber: number,
   key: TrackKey,
-  track: Track
+  track: Track,
+  onlyUnclaimed = false
 ): Promise<void> {
   const issue = await wrapper.getIssue(WORK_OWNER, WORK_REPO, issueNumber)
   const previous = parseTrack(issue.body, key)
+  if (onlyUnclaimed && previous.state !== '待认领')
+    throw new Error('该工序已不再待认领，请刷新')
   if (previous.state === '进行中' && !sameWorkUser(previous.user, track.user))
     throw new Error('任务已被其他协作者认领，请刷新')
   const body = setTrackInBody(issue.body, key, track)

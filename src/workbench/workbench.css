@@ -32,3 +32,5 @@
 .work-export .work-toolbar button{display:inline-flex;align-items:center;gap:6px}.work-export-notice{white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;font-size:13px}
 
 .work-page .work-tasks .work-task-option{display:grid;gap:8px;min-width:0;padding:18px;border:1px solid #a8996e66;border-radius:12px;background:transparent;color:inherit;font:inherit;text-align:left;overflow-wrap:anywhere;cursor:pointer;transition:border-color .15s,box-shadow .15s}.work-page .work-tasks .work-task-option[aria-pressed=true]{border-color:var(--gold,#9b814e);box-shadow:inset 0 0 0 1px var(--gold,#9b814e)}.work-page .work-tasks .work-task-option:focus-visible{outline:2px solid var(--gold,#9b814e);outline-offset:3px}
+
+.work-editor-actions{margin-top:24px;padding-top:12px;border-top:1px solid #a8996e66}.work-editor-actions>.work-toolbar{justify-content:flex-end}
