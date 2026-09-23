@@ -264,6 +264,11 @@ class CatalogBuilder:
             return 'other.tutorial'
         if table == 'ProduceCharacterAdv':
             return 'character.training_stage'
+        if (table == 'ProduceSplitAdv'
+                and row.get('produceType') == 'ProduceType_HatsuboshiIdolFestival'
+                and row.get('type') == 'ProduceAdvType_Opening'
+                and row.get('targetCharacterId')):
+            return 'character.training_story'
         if table in ('ProduceAdv', 'ProduceSplitAdv'):
             return 'character.training_stage' if row.get('targetCharacterId') else 'other.training_shared'
         return {'ProduceStepTransition': 'character.training_transition',

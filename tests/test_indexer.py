@@ -247,3 +247,13 @@ class SharedTrainingTests(unittest.TestCase):
         self.assertEqual(personal[0]['category_id'],'character.training_story')
         self.assertEqual(card[0]['category_id'],'character.idol_card')
         self.assertEqual(unit[0]['category_id'],'other.training_shared')
+
+
+class HifOpeningTests(unittest.TestCase):
+    def test_hif_character_openings_are_main_training_stories(self):
+        builder=CatalogBuilder.__new__(CatalogBuilder)
+        row={'produceType':'ProduceType_HatsuboshiIdolFestival','type':'ProduceAdvType_Opening','targetCharacterId':'hski'}
+        self.assertEqual(builder.classify('ProduceSplitAdv',row),'character.training_story')
+        self.assertEqual(builder.classify('ProduceSplitAdv',{**row,'targetCharacterId':''}),'other.training_shared')
+        self.assertEqual(builder.classify('ProduceSplitAdv',{**row,'type':'ProduceAdvType_Ending'}),'character.training_stage')
+        self.assertEqual(builder.classify('ProduceSplitAdv',{**row,'produceType':'ProduceType_First'}),'character.training_stage')

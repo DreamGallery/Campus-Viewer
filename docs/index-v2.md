@@ -85,3 +85,5 @@ source_records 保留被使用的原始行。condition_sets 按 ID 保存**行�
 
 
 多人共用的培养脚本归入 `other.training_shared`：同一 script_id 的培养入口有两个或以上明确关联角色即可，不要求覆盖完整偶像名单，也不按标题相同判定。角色卡与亲密度不应用此规则。原分类写入 `context.original_category_id`，适用角色集合写入 `context.shared_character_ids`，原始来源和角色关联保留。其他剧情目录也按脚本去重；有明确培养模式的共通主剧情保留模式分组，共用校园脚本合并为“培养校园剧情”。
+
+H.I.F 的角色开场说明（`ProduceSplitAdv`、`ProduceType_HatsuboshiIdolFestival`、`ProduceAdvType_Opening` 且有目标角色）归入培养主剧情，保留 H.I.F 模式分组，包括选拔试验和本战说明。未指定角色的共通开场仍归培养共通剧情。
