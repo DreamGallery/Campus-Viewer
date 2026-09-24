@@ -15,7 +15,7 @@
 
 ## 2. 已知配置与需要准备的信息
 
-当前计划接入的桶为 `hatsuboshi`，资源域名为 `https://assets.hatsuboshi.xyz`。账号及桶配置已写入被 Git 忽略的 `wrangler.local.jsonc` 和 `deploy/.env.r2.local`；仓库中的示例使用占位值。
+本文以桶名 `your-bucket`、资源域名 `https://assets.example.com` 为例，部署时请替换为自己的配置。实际账号及桶配置应写入被 Git 忽略的 `wrangler.local.jsonc` 和 `deploy/.env.r2.local`，不要提交到仓库。
 
 需要准备：
 
@@ -25,7 +25,7 @@
 4. 一个 GitHub OAuth App 的 Client ID 和 Client Secret。
 5. Node.js 22、npm；更新器主机安装 Docker Engine/Desktop 和 Docker Compose 插件。
 
-`assets.hatsuboshi.xyz` 是资源域名，不是默认的网站域名。两者可以独立。不要把网站 Worker 路由覆盖到现有 R2 域名。
+`assets.example.com` 是资源域名，不是默认的网站域名。两者可以独立。不要把网站 Worker 路由覆盖到现有 R2 域名。
 
 ## 3. 本地文件与保密范围
 
@@ -94,11 +94,11 @@ npx wrangler d1 create campus-auth
 D1 创建成功后，将返回的数据库 ID 填入 `wrangler.local.jsonc` 的 `d1_databases[0].database_id`。确认：
 
 - `account_id` 是桶所在账号。
-- `r2_buckets[0].bucket_name` 是 `hatsuboshi`，binding 为 `RESOURCES`。
+- `r2_buckets[0].bucket_name` 是 `your-bucket`，binding 为 `RESOURCES`。
 - D1 binding 为 `DB`。
 - `CAMPUS_R2_PREFIX` 是专用前缀 `campus-v1`，与更新器完全一致。
 - `CAMPUS_PUBLIC_ORIGIN` 改为最终网站 origin，例如 `https://story.example.com`，不带子路径。
-- `CAMPUS_R2_PUBLIC_BASE_URL` 可设为 `https://assets.hatsuboshi.xyz`，不包含 `campus-v1`。
+- `CAMPUS_R2_PUBLIC_BASE_URL` 可设为 `https://assets.example.com`，不包含 `campus-v1`。
 
 本地配置中设置公开资源域名时，下载包接口会在检查最近五版白名单后跳转至该域名。未配置公开域名时，Worker 会通过 R2 binding 流式返回文件，支持 HEAD 和单段 Range。
 
@@ -133,7 +133,7 @@ npx wrangler secret put SESSION_SECRET --config wrangler.local.jsonc
 
 ## 7. R2 域名与缓存
 
-确认桶的设置中已把 `assets.hatsuboshi.xyz` 绑定为公开自定义域名，并且 Cloudflare DNS 正常。
+确认桶的设置中已把 `assets.example.com` 绑定为公开自定义域名，并且 Cloudflare DNS 正常。
 
 新对象布局：
 
@@ -162,11 +162,11 @@ campus-v1/
 | 变量 | 含义 |
 | --- | --- |
 | `CAMPUS_R2_ENDPOINT` | 桶设置中的 S3 API endpoint，一般为 `https://<account>.r2.cloudflarestorage.com`；特殊 jurisdiction 使用控制台实际地址 |
-| `CAMPUS_R2_BUCKET` | `hatsuboshi` |
+| `CAMPUS_R2_BUCKET` | `your-bucket` |
 | `CAMPUS_R2_PREFIX` | `campus-v1` |
 | `AWS_ACCESS_KEY_ID` | R2 S3 Access Key ID |
 | `AWS_SECRET_ACCESS_KEY` | R2 S3 Secret Access Key |
-| `CAMPUS_R2_PUBLIC_BASE_URL` | `https://assets.hatsuboshi.xyz`；空白则媒体通过 Worker |
+| `CAMPUS_R2_PUBLIC_BASE_URL` | `https://assets.example.com`；空白则媒体通过 Worker |
 | `CAMPUS_UPDATE_INTERVAL` | 成功后检查间隔，默认 21600 秒（六小时） |
 | `CAMPUS_DOWNLOAD_WORKERS` | 下载并行度，默认 4 |
 | `CAMPUS_EXTRACT_WORKERS` | 解包并行度，默认 2 |
