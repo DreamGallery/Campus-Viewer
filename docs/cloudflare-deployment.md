@@ -1,6 +1,6 @@
 # Cloudflare Workers + R2 + Docker 更新器部署
 
-本文对应分支 `codex/cloudflare-r2`。原有 `deploy/compose.yaml` 完整 Docker 部署仍然有效。不要同时向同一 R2 前缀运行多个更新器。
+本文对应主分支 `main`。原有 `deploy/compose.yaml` 完整 Docker 部署仍然有效。不要同时向同一 R2 前缀运行多个更新器。
 
 ## 1. 结构与数据流
 
