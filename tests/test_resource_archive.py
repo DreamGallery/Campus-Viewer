@@ -39,6 +39,41 @@ class ArchiveTests(unittest.TestCase):
                 with tarfile.open(root/'downloads'/index['versions'][0]['filename']) as archive:
                     self.assertEqual(archive.getnames(),['game.txt'])
 
+    def test_archive_normalizes_nas_metadata_and_extracts_readable_files(self):
+        from campus_story_index.resource_archive import portable_archive_member
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); self.setup_files(root)
+            dest = root / 'fake-output'
+            (dest / 'image/nested').mkdir(parents=True)
+            (dest / 'image/nested/test.txt').write_text('game data')
+            original = tarfile.TarFile.gettarinfo
+            def nas_metadata(archive, *args, **kwargs):
+                member = original(archive, *args, **kwargs)
+                # Simulate a NAS returning 000 while still allowing the updater to read.
+                member.mode = 0
+                member.uid = 1234; member.gid = 5678
+                member.uname = 'nas-user'; member.gname = 'nas-group'
+                member.pax_headers = {'SCHILY.mode': '0', 'SCHILY.acl.access': 'restricted'}
+                return member
+            publish(root, root / 'cache', root / 'repos', manifest(62))
+            with patch('campus_story_index.resource_archive.build_package', return_value=dest), \
+                    patch.object(tarfile.TarFile, 'gettarinfo', nas_metadata):
+                publish(root, root / 'cache', root / 'repos', manifest(63))
+            index = json.loads((root / 'current/resource-versions.json').read_text())
+            with tarfile.open(root / 'downloads' / index['versions'][0]['filename']) as archive:
+                for member in archive.getmembers():
+                    self.assertEqual(member.mode, 0o755 if member.isdir() else 0o644)
+                    self.assertEqual((member.uid, member.gid, member.uname, member.gname), (0, 0, '', ''))
+                    self.assertFalse(any(k.startswith('SCHILY.') for k in member.pax_headers))
+                archive.extractall(root / 'extracted', filter='data')
+            extracted = root / 'extracted/image/nested/test.txt'
+            self.assertEqual(extracted.read_text(), 'game data')
+            self.assertEqual(extracted.stat().st_mode & 0o777, 0o644)
+            self.assertEqual(extracted.parent.stat().st_mode & 0o777, 0o755)
+            member = tarfile.TarInfo('long-name')
+            member.pax_headers = {'path': 'long-name', 'mtime': '123.4', 'SCHILY.xattr.user.test': 'private'}
+            self.assertEqual(portable_archive_member(member).pax_headers, {'path': 'long-name', 'mtime': '123.4'})
+
     def test_failed_conversion_keeps_baseline_and_current(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);self.setup_files(root)

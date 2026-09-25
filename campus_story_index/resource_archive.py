@@ -12,6 +12,19 @@ from .io import atomic_write
 from .game_package import build_package, snapshot
 
 
+
+def portable_archive_member(member):
+    """Do not export container/NAS permissions, owners or extended metadata."""
+    member.mode = 0o755 if member.isdir() else 0o644
+    member.uid = member.gid = 0
+    member.uname = member.gname = ''
+    # PAX ACL/owner/mode extensions can override the normalized tar header.
+    # Retain only portable path, size and timestamp fields (including long names).
+    member.pax_headers = {key: value for key, value in member.pax_headers.items()
+                          if key in {'path', 'linkpath', 'size', 'mtime'}}
+    return member
+
+
 def prepare_archive(root, release, manifest):
     revision = str(manifest["revision"])
     if not revision.isdigit():
@@ -36,7 +49,7 @@ def prepare_archive(root, release, manifest):
             with tarfile.open(partial, 'w:gz', compresslevel=1, dereference=True) as archive:
                 # Only processed game outputs; never website data, config, repository or credentials.
                 for file in sorted(package.iterdir()):
-                    archive.add(file, arcname=file.name)
+                    archive.add(file, arcname=file.name, filter=portable_archive_member)
             checksum = hashlib.sha256()
             with partial.open('rb') as stream:
                 for chunk in iter(lambda: stream.read(1024 * 1024), b''):

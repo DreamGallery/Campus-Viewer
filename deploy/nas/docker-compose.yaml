@@ -1,7 +1,7 @@
 name: campus-r2-updater
 services:
   updater:
-    image: ${CAMPUS_UPDATER_IMAGE:-dreamgallery/campus-r2-updater:20260923-cf8}
+    image: ${CAMPUS_UPDATER_IMAGE:-dreamgallery/campus-r2-updater:20260925-cf9}
     env_file: .env.r2.local
     environment:
       CAMPUS_PUBLISH_TARGET: r2
