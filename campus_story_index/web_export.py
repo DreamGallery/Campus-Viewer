@@ -103,6 +103,11 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
     voices = {r['script_id']: r for r in voice_manifest['scripts']}
     source_bytes = [catalog_bytes, asset_bytes, voice_bytes, Path(__file__).read_bytes()]
     source_paths = [catalog_path, assets_path, voice_path, Path(__file__)]
+    official_path = Path(__file__).with_name('official_profiles.json')
+    official_bytes = official_path.read_bytes()
+    official_profiles = json.loads(official_bytes)
+    source_paths.append(official_path)
+    source_bytes.append(official_bytes)
     tables = {}
     for name in ['CharacterDetail', 'CharacterColor']:
         content = (masterdata / (name + '.yaml')).read_bytes()
@@ -130,10 +135,14 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
             continue
         ident = c['id']; record = records['Character:' + ident]
         details = {r['type'].removeprefix('CharacterDetailType_'): str(r['content']) for r in tables['CharacterDetail'] if r['characterId'] == ident}
-        color = next((r['mainColor'] for r in tables['CharacterColor'] if r['characterId'] == ident), 'D59C43')
+        if not details.get('Introduction') and official_profiles.get(ident, {}).get('introduction'):
+            details['Introduction'] = official_profiles[ident]['introduction']
+        colors = next((r for r in tables['CharacterColor'] if r['characterId'] == ident), {})
+        color = colors.get('mainColor') or 'D59C43'
         characters.append({'id': ident, 'name': c['name'], 'first_name': record['firstName'],
             'english_name': (record['alphabetFirstName'] + ' ' + record['alphabetLastName']).title(),
             'color': '#' + str(color), 'details': details,
+            'gradient_colors': ['#' + str(colors.get(key) or color) for key in ('gradientColor1', 'gradientColor2')],
             'portrait': assets.get(f'img_chr_{ident}_00-full'),
             'avatar': assets.get(f'img_chr_{ident}_00-thumb-circle'),
             'signature': assets.get(f'img_general_sign_{ident}_00')})

@@ -1,0 +1,164 @@
+{
+  "hski": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/",
+    "quote": [
+      "わたしは勝負が好き！",
+      "勝つのが好き！",
+      "負けるのがだ～いッキラい！！"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/saki/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/saki/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/saki/voice_2.mp3"
+    ]
+  },
+  "ttmr": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/temari/",
+    "quote": [
+      "夢？いいえ、",
+      "必ず達成する目標です。"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/temari/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/temari/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/temari/voice_2.mp3"
+    ]
+  },
+  "fktn": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/kotone/",
+    "quote": [
+      "褒められるのが好き！",
+      "褒めてくれる人が好きっ！",
+      "ファンのみんなが、だぁ～い好きっ♪"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/kotone/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/kotone/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/kotone/voice_2.mp3"
+    ]
+  },
+  "amao": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/mao/",
+    "quote": [
+      "――『可愛い』からこそ",
+      "『かっこいい』。",
+      "ボクらしくやってみますよ。"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/mao/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/mao/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/mao/voice_2.mp3"
+    ]
+  },
+  "kllj": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/lilja/",
+    "quote": [
+      "わたしなんか……とは、思うんです。",
+      "だけど、この夢は、必ず叶えます。"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/lilja/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/lilja/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/lilja/voice_2.mp3"
+    ]
+  },
+  "kcna": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/china/",
+    "quote": [
+      "アイドルとしての実力？",
+      "もちろんぶっちぎりで",
+      "最下位ですわっ！"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/china/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/china/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/china/voice_2.mp3"
+    ]
+  },
+  "ssmk": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/sumika/",
+    "quote": [
+      "あたしが本気で踊るとこ、",
+      "見せたげる♪"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/sumika/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/sumika/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/sumika/voice_2.mp3"
+    ]
+  },
+  "shro": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/hiro/",
+    "quote": [
+      "プロデューサーはひどい。",
+      "鬼。悪魔。",
+      "そういうところが……すき。"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/hiro/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/hiro/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/hiro/voice_2.mp3"
+    ]
+  },
+  "hrnm": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/rinami/",
+    "quote": [
+      "ほら、ネクタイが曲がってるよ。",
+      "――うん、これでよし。"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/rinami/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/rinami/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/rinami/voice_2.mp3"
+    ]
+  },
+  "hume": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/ume/",
+    "quote": [
+      "あたしの夢は、",
+      "お姉ちゃんに勝つことです！"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/ume/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/ume/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/ume/voice_2.mp3"
+    ]
+  },
+  "hmsz": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/misuzu/",
+    "quote": [
+      "……いい日差し。",
+      "こちらで休んでいきませんか。"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/misuzu/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/misuzu/voice_3.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/misuzu/voice_4.mp3"
+    ]
+  },
+  "jsna": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/sena/",
+    "quote": [
+      "初星学園高等部生徒会長。",
+      "――十王星南よ。"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/sena/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/sena/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/sena/voice_2.mp3"
+    ]
+  },
+  "atbm": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/tsubame/",
+    "quote": [
+      "この私を並のアイドルと比べるな。",
+      "私の敵は、あいつだけだ。"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/tsubame/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/tsubame/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/data/voice/tsubame/voice_2.mp3"
+    ],
+    "introduction": "初星学園生徒会副会長。学園No.2のアイドル。実力相応のプライドを持ち、尊大な態度を取る。自分にも他人にも厳しいが、面倒見は良い。幼馴染の星南をライバル視しており、いずれ星南を超えて『一番星』になると公言している。"
+  }
+}

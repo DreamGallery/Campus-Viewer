@@ -5,6 +5,7 @@ export interface Character {
   first_name: string;
   english_name: string;
   color: string;
+  gradient_colors?: [string, string];
   details: Record<string, string>;
   portrait: string | null;
   avatar: string | null;

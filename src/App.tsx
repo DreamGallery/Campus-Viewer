@@ -40,6 +40,10 @@ import {
 
 import ResourceStatus from "./ResourceStatus";
 import ResourceVersions from "./ResourceVersions";
+import { characterGradients } from "./character-colors";
+import { officialProfiles } from "./official-profiles";
+import ProfileSlides from "./ProfileSlides";
+import ProfileVoice from "./ProfileVoice";
 import CardPreview from "./CardPreview";
 import TextUpdates from "./TextUpdates";
 import { ChapterWorkbench, WorkbenchPage } from "./workbench/Workbench";
@@ -168,10 +172,7 @@ function SectionTitle({ en, title }: { en: string; title: string }) {
 function Portrait({ character }: { character: Character }) {
   return (
     <div className="portrait-stage">
-      <div className="portrait-word" aria-hidden="true">
-        {character.english_name.split(" ")[0]}
-      </div>
-      <span className="portrait-caption">初星学園 · アイドル科</span>
+      {officialProfiles[character.id]?.quote && <div className="portrait-caption" lang="ja">{officialProfiles[character.id].quote.map(line => <span key={line}>{line}</span>)}</div>}
       {character.portrait ? (
         <img
           className="portrait"
@@ -191,7 +192,7 @@ function Roster({ selected }: { selected: string }) {
   const { characters } = useCatalog();
   return (
     <nav className="roster" aria-label="选择角色">
-      {characters.map((c, i) => (
+      {characters.map(c => (
         <Link
           key={c.id}
           to={"/idol-commu/" + c.id}
@@ -199,8 +200,7 @@ function Roster({ selected }: { selected: string }) {
           style={{ "--idol": c.color } as CSSProperties}
           aria-current={c.id === selected ? "page" : undefined}
         >
-          <span className="idol-no">{String(i + 1).padStart(2, "0")}</span>
-          {c.avatar && <img src={c.avatar} alt="" loading="lazy" />}
+          {(officialProfiles[c.id]?.photo || c.avatar) && <span className="idol-photo"><img src={officialProfiles[c.id]?.photo || c.avatar!} alt="" loading="lazy" onError={event => { if (c.avatar && event.currentTarget.src !== c.avatar) event.currentTarget.src = c.avatar; }} /></span>}
           <span lang="ja">{c.name}</span>
         </Link>
       ))}
@@ -216,7 +216,7 @@ function CharacterPage() {
   return (
     <main style={{ "--accent": character.color } as CSSProperties}>
       <SectionTitle en="IDOL" title="学园名簿" />
-      <section className="character-hero">
+      <ProfileSlides key={character.id}>
         <Portrait character={character} />
         <div className="profile-sheet">
           <div className="binding" aria-hidden="true" />
@@ -225,6 +225,7 @@ function CharacterPage() {
           <p className="cv">
             CV <span lang="ja">{d.Cv || "—"}</span>
           </p>
+          {officialProfiles[character.id]?.voices.length > 0 && <ProfileVoice key={character.id} voices={officialProfiles[character.id].voices} />}
           <div className="profile-label">
             PROFILE <span>角色档案</span>
           </div>
@@ -233,27 +234,43 @@ function CharacterPage() {
               ["年级", d.Grade],
               ["年龄", d.Age ? d.Age + " 岁" : ""],
               ["生日", d.Birthday],
+              ["星座", d.ZodiacSign],
               ["身高", d.Height ? d.Height + " cm" : ""],
+              ["体重", d.Weight ? d.Weight + " kg" : ""],
+              ["三围", d.ThreeSize],
+              ["惯用手", d.DominantHand],
               ["出身", d.Birthplace],
               ["血型", d.BloodType],
+              ["兴趣", d.Hobby],
+              ["特长", d.SpecialSkill],
             ].map(([label, value]) => (
-              <div key={label}>
+              <div key={label} className={label === "兴趣" || label === "特长" ? "profile-wide" : undefined}>
                 <dt>{label}</dt>
                 <dd>{value || "—"}</dd>
               </div>
             ))}
           </dl>
-          <p className="introduction" lang="ja">{d.Introduction}</p>
+          <p className="introduction" lang="ja">{d.Introduction || officialProfiles[character.id]?.introduction}</p>
           <div className="profile-bottom">
             <a className="gold-button" href="#stories">
               浏览角色剧情 <ArrowDown size={16} />
             </a>
             {character.signature && (
-              <img src={character.signature} alt={`${character.name}的签名`} />
+              <svg className="character-signature" role="img" aria-label={`${character.name}的签名`} viewBox="0 0 100 65">
+                <defs>
+                  <linearGradient id={`signature-colors-${character.id}`} x1="0" y1="0" x2="1" y2="1">
+                    {(character.gradient_colors || characterGradients[character.id] || [character.color, character.color]).map((color, index) => <stop key={index} offset={index} stopColor={color} />)}
+                  </linearGradient>
+                  <mask id={`signature-mask-${character.id}`} x="0" y="0" width="100" height="65" maskUnits="userSpaceOnUse" style={{ maskType: "alpha" }}>
+                    <image href={character.signature} width="100" height="65" preserveAspectRatio="xMidYMid meet" />
+                  </mask>
+                </defs>
+                <rect width="100" height="65" fill={`url(#signature-colors-${character.id})`} mask={`url(#signature-mask-${character.id})`} />
+              </svg>
             )}
           </div>
         </div>
-      </section>
+      </ProfileSlides>
       <div className="roster-heading">
         <p>选择角色</p>
       </div>

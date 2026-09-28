@@ -4,6 +4,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY index.html vite.config.ts tsconfig*.json postcss.config.js tailwind.config.js ./
 COPY src ./src
+COPY campus_story_index/official_profiles.json ./campus_story_index/official_profiles.json
 COPY public/theme-init.js ./public/theme-init.js
 COPY public/images ./public/images
 COPY public/fonts/*LICENSE.txt ./public/fonts/
