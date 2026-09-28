@@ -99,3 +99,12 @@ test('proofread completion credits translator and reviewer in the existing row',
  const record=JSON.parse(Buffer.from(w.written.find(f=>f.path==='records/test.json')!.content!,'base64').toString());
  assert.equal(record.translation.display_id,'原译者');assert.equal(record.proofread.display_id,'校对名字');
 });
+
+import { groupUpdates, type TextUpdate } from '../text-updates';
+test('text updates group recognized pending chapters without merging unrelated scripts or characters',()=>{
+ const row=(id:string,more:Partial<TextUpdate>={}):TextUpdate=>({script_id:id,entry_id:id,title:'名称待补全',group_title:null,category_id:'event.story',character_ids:[],pending:true,images:[],csv_path:'CSV/'+id+'.csv',line_count:1,updated_at:1,change_kind:'added',commit:null,...more});
+ const groups=groupUpdates([row('adv_event_030_main-02'),row('adv_event_030_main-01'),row('adv_event_031_main-01'),row('unknown_01'),row('unknown_02')]);
+ assert.equal(groups.length,4);assert.deepEqual(groups[0].items.map(r=>r.script_id),['adv_event_030_main-01','adv_event_030_main-02']);
+ assert.equal(groupUpdates([row('a',{pending:false,group_title:'同名',character_ids:['hski']}),row('b',{pending:false,group_title:'同名',character_ids:['hume']})]).length,2);
+ assert.equal(groupUpdates([row('a',{pending:false,group_id:'one',group_title:'同名'}),row('b',{pending:false,group_id:'two',group_title:'同名'})]).length,2);
+});

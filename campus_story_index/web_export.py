@@ -258,6 +258,7 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
         updates.append({'script_id': ident, 'entry_id': row['id'],
             'title': row['title'] if not pending else '名称待补全',
             'group_title': row['group_title'] if not pending else None,
+            'group_id': row['group_id'] if not pending else None,
             'category_id': (hints['category_id'] or row['category_id']) if pending else row['category_id'],
             'character_ids': hints['character_ids'] if pending else row['character_ids'],
             'pending': pending, 'inference_basis': 'filename' if pending else None,
