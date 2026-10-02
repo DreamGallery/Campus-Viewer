@@ -1,13 +1,16 @@
 name: campus-r2-updater
 services:
   updater:
-    image: ${CAMPUS_UPDATER_IMAGE:-dreamgallery/campus-r2-updater:20261003-cf13}
+    image: ${CAMPUS_UPDATER_IMAGE:-dreamgallery/campus-r2-updater:20261003-masterdb}
     env_file: .env.r2.local
     environment:
+      CAMPUS_MASTER_SOURCE: ${CAMPUS_MASTER_SOURCE:-api}
+      HATSUBOSHI_CREDENTIALS_FILE: /credentials/account.json
       CAMPUS_PUBLISH_TARGET: r2
       CAMPUS_RUNTIME_ROOT: /runtime
     volumes:
       - runtime:/runtime
+      - ${HATSUBOSHI_CREDENTIALS_DIR:?Set private game account directory}:/credentials
     restart: unless-stopped
     logging:
       driver: json-file

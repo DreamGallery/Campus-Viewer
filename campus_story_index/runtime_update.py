@@ -47,9 +47,27 @@ def sync_repo(root, key, url, branch):
     return target
 
 
-def input_signature(repos, manifest):
+def master_source():
+    source = os.getenv('CAMPUS_MASTER_SOURCE', 'api')
+    if source not in ('api', 'git'):
+        raise ValueError('CAMPUS_MASTER_SOURCE must be api or git')
+    return source
+
+
+def fetch_masterdata(root, repos):
+    if master_source() == 'git':
+        return repos / 'master', None
+    output = root / 'cache/masterdb'
+    command([sys.executable, '-m', 'hatsuboshi_master', '--output', output])
+    # Resolve once: all build stages must consume the same immutable snapshot.
+    snapshot = (output / 'current').resolve(strict=True)
+    state = json.loads((snapshot / 'snapshot.json').read_text())
+    return snapshot, state
+
+
+def input_signature(repos, manifest, master_snapshot=None):
     commits = {key: subprocess.check_output(['git', '-C', str(repos / key), 'rev-parse', 'HEAD']).decode().strip()
-               for key in SOURCES}
+               for key in SOURCES if key != 'master' or master_snapshot is None}
     code = hashlib.sha256()
     for path in sorted(Path(__file__).parent.rglob('*.py')):
         code.update(path.relative_to(Path(__file__).parent).as_posix().encode())
@@ -57,7 +75,7 @@ def input_signature(repos, manifest):
     # Store only a digest: configuration can include private endpoints or credentials.
     config = {k: v for k, v in os.environ.items() if k.startswith('CAMPUS_')}
     return hashlib.sha256(json.dumps({'commits': commits, 'manifest': manifest,
-        'code': code.hexdigest(), 'config': config}, sort_keys=True).encode()).hexdigest()
+        'code': code.hexdigest(), 'config': config, 'master': master_snapshot}, sort_keys=True).encode()).hexdigest()
 
 
 def link_copy(src, dst):
@@ -122,10 +140,14 @@ def update(root):
         try:
             phase('同步文本与 masterdata')
             for key, (url, branch) in SOURCES.items():
+                if key == 'master' and master_source() == 'api':
+                    continue
                 sync_repo(repos, key, os.getenv(f'CAMPUS_{key.upper()}_REPO', url), os.getenv(f'CAMPUS_{key.upper()}_BRANCH', branch))
+            phase('从游戏 API 获取并验证 masterdb' if master_source() == 'api' else '读取 Git masterdata')
+            masterdata, master_snapshot = fetch_masterdata(root, repos)
             phase('检查游戏资源清单与仓库提交')
             manifest = fetch_manifest(config_repo=repos / 'toolkit', config_ref='HEAD')
-            inputs = input_signature(repos, manifest)
+            inputs = input_signature(repos, manifest, master_snapshot)
             saved = root / 'current/update-inputs.json'
             if os.getenv('CAMPUS_FORCE_UPDATE') != '1' and saved.exists() and json.loads(saved.read_text()).get('signature') == inputs:
                 status.update(state='ready', revision=manifest['revision'], release=(root / 'current').resolve().name)
@@ -136,7 +158,7 @@ def update(root):
             def run(module, *args):
                 command([sys.executable, '-m', 'campus_story_index' + ('.' + module if module else ''), *args])
             phase('构建剧情索引')
-            run('', '--masterdata', repos / 'master', '--stories', repos / 'story', '--output', generated / 'story-index.json', '--strict')
+            run('', '--masterdata', masterdata, '--stories', repos / 'story', '--output', generated / 'story-index.json', '--strict')
             phase('下载语音资源')
             run('audio_download', '--adv', repos / 'adv/Resource', '--catalog', generated / 'story-index.json', '--config-repo', repos / 'toolkit', '--config-ref', 'HEAD', '--manifest', cache / 'audio/OctoManifest.json', '--output', cache / 'audio', '--workers', os.getenv('CAMPUS_DOWNLOAD_WORKERS', '4'))
             phase('解包语音')
@@ -147,12 +169,12 @@ def update(root):
             run('web_assets', '--catalog', generated / 'story-index.json', '--manifest', cache / 'audio/OctoManifest.json', '--cache', cache / 'images/bundles', '--output', cache / 'web/assets')
             phase('下载歌曲、解码 FLAC 并生成同步歌词')
             music_ids = os.getenv('CAMPUS_MUSIC_IDS', '').split()
-            run('music_preview', '--masterdata', repos / 'master', '--manifest', cache / 'audio/OctoManifest.json',
+            run('music_preview', '--masterdata', masterdata, '--manifest', cache / 'audio/OctoManifest.json',
                 '--cache', cache / 'music-source', '--output', cache / 'music',
                 '--decoder', os.getenv('CAMPUS_DECODER', '/usr/local/bin/vgmstream-cli'),
                 '--scope', os.getenv('CAMPUS_MUSIC_SCOPE', 'vocal'), *(['--ids', *music_ids] if music_ids else []))
             phase('生成并检查网页目录')
-            run('web_export', '--catalog', generated / 'story-index.json', '--masterdata', repos / 'master', '--stories', repos / 'story', '--assets', cache / 'web/assets/manifest.json', '--voices', generated / 'voice-index/manifest.json', '--output', cache / 'web/catalog')
+            run('web_export', '--catalog', generated / 'story-index.json', '--masterdata', masterdata, '--stories', repos / 'story', '--assets', cache / 'web/assets/manifest.json', '--voices', generated / 'voice-index/manifest.json', '--output', cache / 'web/catalog')
             command([sys.executable, '/app/scripts/verify_web_export.py', '--catalog', generated / 'story-index.json', '--web', cache / 'web'])
             phase('打包并发布资源版本')
             manifest = json.loads((cache / 'audio/OctoManifest.json').read_text())

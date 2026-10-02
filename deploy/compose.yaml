@@ -5,11 +5,14 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.updater
     environment:
+      CAMPUS_MASTER_SOURCE: ${CAMPUS_MASTER_SOURCE:-api}
+      HATSUBOSHI_CREDENTIALS_FILE: /credentials/account.json
       CAMPUS_UPDATE_INTERVAL: ${CAMPUS_UPDATE_INTERVAL:-21600}
       CAMPUS_DOWNLOAD_WORKERS: ${CAMPUS_DOWNLOAD_WORKERS:-4}
       CAMPUS_EXTRACT_WORKERS: ${CAMPUS_EXTRACT_WORKERS:-2}
     volumes:
       - runtime:/runtime
+      - ${HATSUBOSHI_CREDENTIALS_DIR:?Set private game account directory}:/credentials
     restart: unless-stopped
   api:
     build:

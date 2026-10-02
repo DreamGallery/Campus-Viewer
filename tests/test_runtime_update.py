@@ -57,7 +57,7 @@ class RuntimeUpdateTests(unittest.TestCase):
             root=Path(folder); saved=root/'releases/old'; saved.mkdir(parents=True)
             (saved/'update-inputs.json').write_text('{"signature":"same"}')
             (root/'current').symlink_to(saved)
-            with patch('campus_story_index.runtime_update.sync_repo'), patch('campus_story_index.runtime_update.fetch_manifest',return_value={'revision':62}), patch('campus_story_index.runtime_update.input_signature',return_value='same'), patch('campus_story_index.runtime_update.command') as command, patch('campus_story_index.runtime_update.publish') as pub:
+            with patch('campus_story_index.runtime_update.fetch_masterdata',return_value=(Path('/fake-master'),{'version':'test'})), patch('campus_story_index.runtime_update.sync_repo'), patch('campus_story_index.runtime_update.fetch_manifest',return_value={'revision':62}), patch('campus_story_index.runtime_update.input_signature',return_value='same'), patch('campus_story_index.runtime_update.command') as command, patch('campus_story_index.runtime_update.publish') as pub:
                 self.assertTrue(update(root));command.assert_not_called();pub.assert_not_called()
             self.assertEqual(json.loads((root/'status.json').read_text())['state'],'ready')
 
@@ -67,3 +67,31 @@ class RuntimeUpdateTests(unittest.TestCase):
             self.assertNotEqual(first,input_signature(Path('/fake'),{'revision':63}))
         with patch('campus_story_index.runtime_update.subprocess.check_output',return_value=b'commit-b'):
             self.assertNotEqual(first,input_signature(Path('/fake'),{'revision':62}))
+
+
+class MasterSourceTests(unittest.TestCase):
+    def test_api_snapshot_changes_signature_without_master_git_checkout(self):
+        with patch('campus_story_index.runtime_update.subprocess.check_output', return_value=b'commit') as git:
+            one = input_signature(Path('/fake'), {}, {'version': 'one'})
+            two = input_signature(Path('/fake'), {}, {'version': 'two'})
+            self.assertNotEqual(one, two)
+            self.assertTrue(all('/fake/master' not in call.args[0] for call in git.call_args_list))
+
+    def test_fetch_masterdata_pins_current_snapshot(self):
+        from campus_story_index.runtime_update import fetch_masterdata
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            snapshot = root / 'cache/masterdb/versions/one'
+            snapshot.mkdir(parents=True)
+            (snapshot / 'snapshot.json').write_text('{"version":"one"}')
+            (root / 'cache/masterdb/current').symlink_to(snapshot)
+            with patch.dict(os.environ, {'CAMPUS_MASTER_SOURCE':'api'}), patch('campus_story_index.runtime_update.command') as command:
+                path, state = fetch_masterdata(root, root/'repos')
+            self.assertEqual(path, snapshot)
+            self.assertEqual(state['version'], 'one')
+            self.assertIn('hatsuboshi_master', command.call_args.args[0])
+
+    def test_failed_master_fetch_cannot_fall_back_to_old_git_tables(self):
+        from campus_story_index.runtime_update import fetch_masterdata
+        with patch.dict(os.environ, {'CAMPUS_MASTER_SOURCE':'api'}), patch('campus_story_index.runtime_update.command', side_effect=RuntimeError('failed')):
+            with self.assertRaises(RuntimeError): fetch_masterdata(Path('/fake'), Path('/fake/repos'))

@@ -61,3 +61,26 @@ OAuth 会话仍在 API 内存里；重启 API 后重新登录即可。当前部�
 包为 `.tar.gz`，包含 `assetbundle/`、`resource/`、`image/Texture2D/`、`stretch/` 中有变化的内容，以及 `package.json`（更新文件与移除清单）。没有变化的目录可能不存在。包只包含变化部分，不是可独立还原整个游戏的全量备份；跨越多个 revision 时提供上次成功基线到本次 revision 的累计差异，不伪造未观测版本。
 
 所有处理与打包成功后才推进基线并发布链接；失败仍从原基线重试。相同 revision 不重复打包。第六个包成功发布后删除最旧下载包；发布快照的保留策略不变。已完成打包的临时处理缓存会清理，失败缓存用于重试。下载支持 HTTP Range。升级前备份原有资源卷；旧部署没有基线时升级首轮仅建立基线。
+
+
+## 游戏 masterdb 数据源
+
+更新器默认 `CAMPUS_MASTER_SOURCE=api`，镜像内包含固定提交的 HatsuboshiToolkit
+masterdb 模块。每轮先登录游戏并拉取 masterdb，所有表通过 SQLCipher、protobuf
+完整性检查后，使用同一份不可变快照生成剧情、音乐和网页索引。失败保留既有发布。
+更新判断同时比较游戏 master 版本、schema 和表内容哈希。
+
+在 Compose 同目录的 `.env` 或 shell 环境中设置
+`HATSUBOSHI_CREDENTIALS_DIR=/absolute/private/game-account`；该目录内存放
+`account.json`，内容为 `{"refresh_token":"专用游戏测试账号令牌"}`。目录权限 700，
+文件权限 600。目录需要可写，以保存轮换后的令牌。不要把账号文件放进构建上下文、
+Git 或镜像。可用 `HATSUBOSHI_APP_VERSION` 覆盖自动检测的客户端版本。
+
+显式设置 `CAMPUS_MASTER_SOURCE=git` 可继续使用原 Git 数据源；API 模式失败不会
+自动退回旧数据。Git 模式下可以移除 Compose 的 `/credentials` 挂载。
+
+手动只更新 masterdb：
+
+```sh
+docker compose exec updater python -m hatsuboshi_master --output /runtime/cache/masterdb
+```
