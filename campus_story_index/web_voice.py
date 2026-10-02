@@ -21,7 +21,7 @@ def chapter_voices(root, summary):
             for variant in event.get('audio_variants', []):
                 audio = variant.get('audio_path', '')
                 parsed = PurePosixPath(audio)
-                if variant.get('status') != 'verified' or not audio.startswith('clips/') or '..' in parsed.parts or parsed.suffix != '.wav':
+                if variant.get('status') != 'verified' or not audio.startswith('clips/') or '..' in parsed.parts or parsed.suffix not in {'.wav', '.flac'}:
                     continue
                 clip = {'url': '/audio/' + audio.removeprefix('clips/'), 'label': variant.get('voice_ref', '')}
                 if clip not in clips:

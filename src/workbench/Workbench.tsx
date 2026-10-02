@@ -1,3 +1,4 @@
+import { taskDatePages } from './date-pages';
 import { TaskExport } from './TaskExport';
 import { exportTxt, downloadFile } from './export';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -96,8 +97,19 @@ export function WorkbenchPage() {
     && (status === 'all' || docStatus(d) === status));
   if (sort === 'updated') shown.sort((a,b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.number - b.number);
   if (sort === 'name') shown.sort((a,b) => a.title.localeCompare(b.title, 'ja', { numeric: true }) || a.number - b.number);
-  const pages = Math.max(1, Math.ceil(shown.length / 24));
+  const datePages = taskDatePages(shown);
+  const pages = Math.max(1, datePages.length);
   const currentPage = Math.min(page, pages);
+  const currentDate = datePages[currentPage - 1];
+  const pageTasks = currentDate?.tasks || [];
+  const dateNavigation = () => !!datePages.length && <nav className="work-toolbar work-date-pagination" aria-label="协作任务日期分页">
+    <button disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>较新日期</button>
+    <label>创建日期 <select aria-label="任务创建日期" value={currentDate.date} onChange={event => setPage(datePages.findIndex(group => group.date === event.target.value) + 1)}>
+      {datePages.map(group => <option key={group.date} value={group.date}>{group.date}（{group.tasks.length} 项）</option>)}
+    </select></label>
+    <span>{currentPage} / {pages} · 当日 {pageTasks.length} 项 · 北京时间</span>
+    <button disabled={currentPage === pages} onClick={() => setPage(currentPage + 1)}>较早日期</button>
+  </nav>;
   return <main className="work-page">
     <header className="work-heading"><div className="section-title"><span className="section-en" aria-hidden="true">TRANSLATION</span><div><h1>翻译协作</h1></div></div><Login auth={auth} refresh={refresh} /></header>
     <section className="category-directory">
@@ -117,16 +129,16 @@ export function WorkbenchPage() {
         <span>{mine ? '我的任务' : '全部任务'} · {shown.length} 项</span>
       </div>
       {!shown.length && <p>没有符合条件的任务</p>}
-      {selectionMode && <><div className="work-toolbar"><button disabled={claiming} onClick={() => setSelected(new Set(shown.filter(eligible).map(d => d.number)))}>选择筛选结果</button><button disabled={claiming} onClick={() => setSelected(prev => new Set([...prev, ...shown.slice((currentPage-1)*24,currentPage*24).filter(eligible).map(d => d.number)]))}>选择本页</button><button disabled={claiming || !selected.size} onClick={() => setSelected(new Set())}>清空选择</button></div>
+      {selectionMode && <><div className="work-toolbar"><button disabled={claiming} onClick={() => setSelected(new Set(shown.filter(eligible).map(d => d.number)))}>选择筛选结果</button><button disabled={claiming} onClick={() => setSelected(prev => new Set([...prev, ...pageTasks.filter(eligible).map(d => d.number)]))}>选择本页</button><button disabled={claiming || !selected.size} onClick={() => setSelected(new Set())}>清空选择</button></div>
       {exportMode ? <TaskExport tasks={docs.filter(d => selected.has(d.number))} auth={auth} /> : <div className="work-toolbar"><span>已选 {selected.size} 项 · 仅可选择待认领任务</span><button className="work-primary" disabled={claiming || !selected.size} onClick={claimSelected}>确认认领{selectionMode === 'tr' ? '翻译' : '校对'}</button></div>}</>}
       {claimNotice && <p className="work-export-notice" role="status">{claimNotice}</p>}
-      <div className="work-tasks">{shown.slice((currentPage-1)*24,currentPage*24).map(d => {
+      <div className="work-tasks">{pageTasks.map(d => {
         const content = <><small>{STORY_LABELS[storyKind(d.title)]} · {docStatus(d)}</small><strong>{d.title}</strong><span>翻译：{d.tr.state} {displayWorkUser(d.tr.user)}</span><span>校对：{d.pr.state} {displayWorkUser(d.pr.user)}</span><small>更新于 {new Date(d.updatedAt).toLocaleDateString('zh-CN')}</small></>;
         return selectionMode
           ? <button key={d.number} type="button" disabled={claiming || !eligible(d)} className="work-task-option" aria-label={'选择 ' + d.title} aria-pressed={selected.has(d.number)} onClick={() => setSelected(prev => { const next = new Set(prev); if (next.has(d.number)) next.delete(d.number); else next.add(d.number); return next; })}>{content}</button>
           : <Link key={d.number} to={'/chapter/' + encodeURIComponent(d.title) + '?issue=' + d.number}>{content}</Link>;
       })}</div>
-      {pages > 1 && <nav className="work-toolbar" aria-label="协作任务分页"><button disabled={currentPage===1} onClick={() => setPage(currentPage-1)}>上一页</button><span>{currentPage} / {pages}</span><button disabled={currentPage===pages} onClick={() => setPage(currentPage+1)}>下一页</button></nav>}
+      {dateNavigation()}
     </>}
     </section>
   </main>;

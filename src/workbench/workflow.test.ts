@@ -108,3 +108,14 @@ test('text updates group recognized pending chapters without merging unrelated s
  assert.equal(groupUpdates([row('a',{pending:false,group_title:'同名',character_ids:['hski']}),row('b',{pending:false,group_title:'同名',character_ids:['hume']})]).length,2);
  assert.equal(groupUpdates([row('a',{pending:false,group_id:'one',group_title:'同名'}),row('b',{pending:false,group_id:'two',group_title:'同名'})]).length,2);
 });
+
+import { taskDatePages } from './date-pages';
+test('task date pages use creation date in Shanghai, keep entire days, and preserve in-day order', () => {
+ const issue = (number: number, created_at: string) => docFromIssue({number, title: 'adv_' + number, body: '', created_at, updated_at: '2030-01-01T00:00:00Z'});
+ const tasks = Array.from({length: 30}, (_, i) => issue(i, '2026-09-29T16:00:00Z'));
+ const pages = taskDatePages([issue(100,'2026-09-29T15:59:59Z'), ...tasks, issue(101, '')]);
+ assert.deepEqual(pages.map(page => page.date), ['2026-09-30','2026-09-29','日期未知']);
+ assert.equal(pages[0].tasks.length,30);
+ assert.deepEqual(pages[0].tasks.map(task => task.number),tasks.map(task => task.number));
+ assert.equal(taskDatePages([]).length,0);
+});

@@ -76,7 +76,7 @@ def publish(root, cache, repos, manifest=None, inputs=None):
     stage.mkdir()
     try:
         shutil.copytree(cache / 'web', stage / 'web', copy_function=link_copy)
-        shutil.copytree(cache / 'audio/clips', stage / 'audio', copy_function=link_copy)
+        shutil.copytree(cache / 'audio/clips', stage / 'audio', copy_function=link_copy, ignore=shutil.ignore_patterns('*.wav', '.*.tmp'))
         shutil.copytree(repos / 'story/CSV', stage / 'story/CSV')
         shutil.copytree(repos / 'adv/Resource', stage / 'adv')
         if inputs is not None:

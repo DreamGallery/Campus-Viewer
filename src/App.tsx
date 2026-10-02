@@ -11,6 +11,7 @@ import {
   Route,
   Routes,
   useLocation,
+  useNavigate,
   useParams,
   useSearchParams,
 } from "react-router-dom";
@@ -609,6 +610,7 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
   );
 }
 function ChapterPage() {
+  const navigate = useNavigate();
   const { scriptId } = useParams();
   const [params, setParams] = useSearchParams();
   const catalog = useCatalog();
@@ -626,6 +628,7 @@ function ChapterPage() {
     );
   const entry =
     data.entries.find((e) => e.id === params.get("entry")) || data.entries[0];
+  const previewImages = entry.group_images?.length ? entry.group_images : data.group_images?.length ? data.group_images : entry.group_image ? [{ url: entry.group_image, label: '剧情封面' }] : [];
   const root = entry.category_id.split(".")[0];
   const category = catalog.categories.find((c) => c.id === entry.category_id);
   const back =
@@ -634,16 +637,18 @@ function ChapterPage() {
       : "/stories/" + root;
   return (
     <main className="chapter-page">
-      <Link className="back-link" to={back}>
-        <ArrowLeft size={16} />
-        返回剧情目录
-      </Link>
+      {data.metadata_pending ? <button className="back-link" onClick={() => {
+        if (typeof window.history.state?.idx === 'number' && window.history.state.idx > 0) navigate(-1);
+        else navigate('/updates?view=pending', { replace: true });
+      }}><ArrowLeft size={16} />返回上一页</button> : <Link className="back-link" to={back}>
+        <ArrowLeft size={16} />返回剧情目录
+      </Link>}
       <section className="chapter-sheet">
         <p className="eyebrow">CHAPTER / {category?.name}</p>
         <p className="chapter-group-title">{entry.group_title}</p>
         <h1>{data.metadata_pending ? "名称待补全" : entry.title}</h1>
         {data.metadata_pending && <p className="pending-explanation">文本已收录，剧情资料尚未关联。<Link to="/updates?view=pending">查看待补全资料</Link></p>}
-        {data.metadata_pending && !!data.group_images?.length && <CardPreview images={data.group_images} title="文件名匹配预览" />}
+        {!!previewImages.length && <CardPreview images={previewImages} title={data.metadata_pending ? "文件名匹配预览" : entry.group_title || entry.title} />}
         <div className="chapter-status">
           <span>{statusLabel[data.text_status]}</span>
           <span>{data.line_count} 条文本</span>

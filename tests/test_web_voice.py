@@ -10,6 +10,9 @@ class WebVoiceTest(unittest.TestCase):
             root = Path(temp)
             data = {'sources': {'csv_sha256': 'abc'}, 'voice_events': [{'id': 'v1', 'audio_variants': [
                 {'status': 'verified', 'audio_path': 'clips/bank/0001.wav', 'voice_ref': 'v1'},
+                {'status': 'verified', 'audio_path': 'clips/bank/0003.flac', 'voice_ref': 'v3'},
+                {'status': 'unverified', 'audio_path': 'clips/bank/0004.flac'},
+                {'status': 'verified', 'audio_path': 'clips/../bad.flac'},
                 {'status': 'unverified', 'audio_path': 'clips/bank/0002.wav'},
                 {'status': 'verified', 'audio_path': 'clips/../bad.wav'}]}], 'lines': [
                 {'csv_match_status': 'matched', 'audio_status': 'linked', 'voice_event_ids': ['v1'], 'csv_record_index': 1, 'text': 'hi', 'speaker': 'A'},
@@ -18,6 +21,6 @@ class WebVoiceTest(unittest.TestCase):
             result = chapter_voices(root, {'path':'sample.json'})
             self.assertEqual(result['source_sha256'], 'abc')
             self.assertEqual(len(result['lines']), 1)
-            self.assertEqual(result['lines'][0]['clips'], [{'url':'/audio/bank/0001.wav', 'label':'v1'}])
+            self.assertEqual(result['lines'][0]['clips'], [{'url':'/audio/bank/0001.wav', 'label':'v1'}, {'url':'/audio/bank/0003.flac', 'label':'v3'}])
     def test_missing_index_is_empty(self):
         self.assertEqual(chapter_voices(Path('.'), None)['lines'], [])

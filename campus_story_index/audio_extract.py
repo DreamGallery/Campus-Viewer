@@ -1,4 +1,4 @@
-"""ACB/AWB to verified WAVs, with one atomic completion manifest per bank."""
+"""ACB/AWB to verified lossless FLAC level 8 clips, with one atomic completion manifest per bank."""
 import argparse
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -30,6 +30,20 @@ def file_digest(path):
     return result.hexdigest()
 
 
+def encode_flac(wav_path):
+    """Verify decoded PCM during lossless encoding in the temporary extraction directory."""
+    target = wav_path.with_suffix('.flac')
+    temporary = target.with_name('.' + target.name + '.tmp')
+    try:
+        subprocess.run(['flac', '-8', '--verify', '--no-padding', '--silent', '--force',
+                        '-o', str(temporary), str(wav_path)], check=True,
+                       capture_output=True, timeout=600)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return target
+
+
 def decode_bank(item, companion, directory, decoder, decoder_sha256, wait_seconds=0):
     directory = Path(directory).resolve()
     bank = directory / 'banks' / item['name']
@@ -42,7 +56,8 @@ def decode_bank(item, companion, directory, decoder, decoder_sha256, wait_second
         if companion:
             expected[companion['name']] = companion['md5']
         if previous.get('source_md5') == expected and previous.get('decoder_sha256') == decoder_sha256:
-            if all((directory / r['path']).is_file() and
+            if all(Path(r['path']).suffix == '.flac' and
+                   (directory / r['path']).is_file() and
                    (directory / r['path']).stat().st_size == r['bytes'] and
                    file_digest(directory / r['path']) == r['sha256'] for r in previous['clips']):
                 return {'bank': stem, 'status': 'cached', 'clips': len(previous['clips'])}
@@ -81,11 +96,13 @@ def decode_bank(item, companion, directory, decoder, decoder_sha256, wait_second
             expected_samples = row.get('playSamples', row.get('numberOfSamples'))
             if info['sample_count'] != expected_samples or info['sample_rate'] != row['sampleRate']:
                 raise ValueError('wav_metadata_mismatch')
+            flac_path = encode_flac(wav_path)
             cue_name = stream.get('name') or None
             clips.append({'id': stem + ':' + str(index), 'bank': stem,
                           'cue_name': cue_name, 'stream_index': index,
-                          'path': str((final_dir / wav_path.name).relative_to(directory)),
-                          'bytes': wav_path.stat().st_size, 'sha256': file_digest(wav_path),
+                          'path': str((final_dir / flac_path.name).relative_to(directory)),
+                          'bytes': flac_path.stat().st_size, 'sha256': file_digest(flac_path),
+                          'format': 'flac', 'compression_level': 8,
                           **info, 'duration_ms': round(info['sample_count'] * 1000 / info['sample_rate'], 3),
                           'encoding': row.get('encoding')})
         declared_total = (metadata[0].get('streamInfo') or {}).get('total', 1)
@@ -93,7 +110,7 @@ def decode_bank(item, companion, directory, decoder, decoder_sha256, wait_second
             raise ValueError('incomplete_bank_extraction')
         # Complete files first; completion marker is published last. Sources are never removed.
         final_dir.mkdir(parents=True, exist_ok=True)
-        for file in stage.glob('*.wav'):
+        for file in stage.glob('*.flac'):
             os.replace(file, final_dir / file.name)
         source_md5 = {item['name']: item['md5']}
         if companion:
@@ -102,7 +119,7 @@ def decode_bank(item, companion, directory, decoder, decoder_sha256, wait_second
                     'decoder_version': metadata[0].get('version'), 'clips': clips}
         atomic_write(done_path, manifest)
         return {'bank': stem, 'status': 'decoded', 'clips': len(clips)}
-    except (ValueError, OSError, wave.Error, subprocess.TimeoutExpired) as exc:
+    except (ValueError, OSError, wave.Error, subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
         return {'bank': stem, 'status': 'failed', 'error': type(exc).__name__, 'detail': str(exc)[:200]}
     finally:
         shutil.rmtree(stage)

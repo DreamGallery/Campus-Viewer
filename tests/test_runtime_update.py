@@ -10,7 +10,7 @@ from campus_story_index.runtime_update import publish, update, input_signature
 class RuntimeUpdateTests(unittest.TestCase):
     def fixture(self, root):
         cache, repos = root / 'cache', root / 'repos'
-        for path in ['web/catalog/manifest.json', 'audio/clips/bank/0001.wav']:
+        for path in ['web/catalog/manifest.json', 'audio/clips/bank/0001.flac']:
             p = cache / path; p.parent.mkdir(parents=True, exist_ok=True); p.write_text('old')
         for path in ['story/CSV/a.csv', 'adv/Resource/a.txt']:
             p = repos / path; p.parent.mkdir(parents=True, exist_ok=True); p.write_text('source')
@@ -20,11 +20,11 @@ class RuntimeUpdateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder); cache, repos = self.fixture(root)
             first = publish(root, cache, repos)
-            p = cache / 'audio/clips/bank/0001.wav'; temp = p.with_suffix('.new'); temp.write_text('new'); os.replace(temp, p)
-            self.assertEqual((root / 'current/audio/bank/0001.wav').read_text(), 'old')
+            p = cache / 'audio/clips/bank/0001.flac'; temp = p.with_suffix('.new'); temp.write_text('new'); os.replace(temp, p)
+            self.assertEqual((root / 'current/audio/bank/0001.flac').read_text(), 'old')
             second = publish(root, cache, repos)
             self.assertNotEqual(first, second)
-            self.assertEqual((root / 'current/audio/bank/0001.wav').read_text(), 'new')
+            self.assertEqual((root / 'current/audio/bank/0001.flac').read_text(), 'new')
             self.assertTrue((root / 'releases' / first).exists())
 
     def test_failed_publish_preserves_current_release(self):
