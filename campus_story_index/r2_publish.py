@@ -227,6 +227,9 @@ def publish_release(root, release, s3=None):
     for name in ['resource-snapshot.json', 'resource-versions.json']:
         metadata_jobs.append((stage / name, 'releases/' + release + '/' + name))
     batch('版本信息', metadata_jobs, workers=1)
+    if (stage / 'music/library.json').is_file():
+        from .music_publish import publish_music
+        publish_music(stage / 'music', s3)
     print('R2: 正在切换已发布版本', flush=True)
     pointer = {'schema_version': 1, 'release': release, 'published_at': int(time.time()), 'versions': versions}
     # Conditional publication rejects competing updaters, including the first publication.

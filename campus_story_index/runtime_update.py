@@ -77,6 +77,8 @@ def publish(root, cache, repos, manifest=None, inputs=None):
     try:
         shutil.copytree(cache / 'web', stage / 'web', copy_function=link_copy)
         shutil.copytree(cache / 'audio/clips', stage / 'audio', copy_function=link_copy, ignore=shutil.ignore_patterns('*.wav', '.*.tmp'))
+        if (cache / 'music/library.json').is_file():
+            shutil.copytree(cache / 'music', stage / 'music', copy_function=link_copy)
         shutil.copytree(repos / 'story/CSV', stage / 'story/CSV')
         shutil.copytree(repos / 'adv/Resource', stage / 'adv')
         if inputs is not None:
@@ -143,6 +145,12 @@ def update(root):
             run('voice_index', '--catalog', generated / 'story-index.json', '--stories', repos / 'story', '--adv', repos / 'adv/Resource', '--audio-root', cache / 'audio', '--output', generated / 'voice-index')
             phase('下载和解包网页图片')
             run('web_assets', '--catalog', generated / 'story-index.json', '--manifest', cache / 'audio/OctoManifest.json', '--cache', cache / 'images/bundles', '--output', cache / 'web/assets')
+            phase('下载歌曲、解码 FLAC 并生成同步歌词')
+            music_ids = os.getenv('CAMPUS_MUSIC_IDS', '').split()
+            run('music_preview', '--masterdata', repos / 'master', '--manifest', cache / 'audio/OctoManifest.json',
+                '--cache', cache / 'music-source', '--output', cache / 'music',
+                '--decoder', os.getenv('CAMPUS_DECODER', '/usr/local/bin/vgmstream-cli'),
+                '--scope', os.getenv('CAMPUS_MUSIC_SCOPE', 'vocal'), *(['--ids', *music_ids] if music_ids else []))
             phase('生成并检查网页目录')
             run('web_export', '--catalog', generated / 'story-index.json', '--masterdata', repos / 'master', '--stories', repos / 'story', '--assets', cache / 'web/assets/manifest.json', '--voices', generated / 'voice-index/manifest.json', '--output', cache / 'web/catalog')
             command([sys.executable, '/app/scripts/verify_web_export.py', '--catalog', generated / 'story-index.json', '--web', cache / 'web'])

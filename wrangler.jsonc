@@ -13,7 +13,8 @@
     "run_worker_first": [
       "/api/*",
       "/catalog/*",
-      "/media/*"
+      "/media/*",
+      "/music/*"
     ]
   },
   "vars": {

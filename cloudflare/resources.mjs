@@ -76,7 +76,7 @@ export function resources(env) {
   }
   async function route(request) {
     const path=decodeURIComponent(new URL(request.url).pathname);
-    const handled=path.startsWith('/catalog/') || path.startsWith('/media/') || path.startsWith('/api/resources/download/') || path==='/api/resources/versions';
+    const handled=path.startsWith('/music/') || path.startsWith('/catalog/') || path.startsWith('/media/') || path.startsWith('/api/resources/download/') || path==='/api/resources/versions';
     if(!handled) return null;
     if(!['GET','HEAD'].includes(request.method)) return new Response(null,{status:405,headers:{Allow:'GET, HEAD'}});
     if(path==='/api/resources/versions') {
@@ -95,6 +95,14 @@ export function resources(env) {
     if(path.startsWith('/media/')) {
       if(!/^\/media\/[a-f0-9]{64}\/[^/]+$/.test(path)) throw error(404);
       return stream(request,path.slice(1),false,true);
+    }
+    if(path.startsWith('/music/')) {
+      if(path!=='/music/library.json') throw error(404);
+      let info;
+      try { info=JSON.parse(await text('music/current.json')); }
+      catch(e) { if(e.status!==404) throw e; return new Response(request.method==='HEAD'?null:JSON.stringify({schema_version:1,tracks:[]}),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}}); }
+      if(info.schema_version!==1 || !/^text\/[a-f0-9]{64}\/music-library\.json$/.test(info.library)) throw error(503);
+      return stream(request,info.library);
     }
     if(path==='/catalog/manifest.json') {
       const info=await current();if(!info) throw error(503);

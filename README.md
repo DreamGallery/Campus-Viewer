@@ -46,6 +46,25 @@ OAuth 回调为 `http://127.0.0.1:5173/api/auth/callback`，地址不要混用 l
 
 正式稿按文件 SHA 和工序 revision 检查冲突，用单次 Git commit 提交多个文件。Issue 更新不支持跨接口事务；正式稿提交后状态同步失败会另行提示。
 
+## 音乐播放器
+
+底部播放器可展开查看封面、同步歌词和歌单，支持搜索、切歌、随机播放、单曲循环和点击歌词跳转；播放剧情语音或角色介绍时会自动暂停音乐。
+
+Docker 更新器从 `Music.yaml` 选取有完整 AWB 的演唱版本，默认排除伴奏和 BGM。下载并校验 ACB/AWB 后，从完整 AWB 解码为 FLAC 8 级，保留采样率并验证 PCM；封面取自游戏资源，逐句歌词从 Live 时间轴读取。没有对应时间轴的歌曲显示“暂无同步歌词”。已完成的下载和转码会复用，原文件变化或校验失败时重新处理。
+
+本地使用安装了项目资源依赖、vgmstream-cli 和 flac 的环境运行：
+
+```sh
+python -m campus_story_index.music_preview --masterdata /path/to/gakumasu-diff --manifest /path/to/OctoManifest.json --decoder /path/to/vgmstream-cli
+npm run dev -- --host 127.0.0.1 --port 5174
+```
+
+输出在 `data/music`，缓存位于 `data/music-source`，均不提交仓库或打进镜像。`--ids music-char-hski-001` 可限制本地试听范围。Docker 对应设置为 `CAMPUS_MUSIC_IDS`（空格分隔）；`CAMPUS_MUSIC_SCOPE=vocal` 为默认范围，`all` 另含伴奏和 BGM。
+
+R2 的音乐使用独立的 `music/current.json` 索引指针，只有引用的 FLAC、封面和歌词全部上传成功后才切换。网页通过 `/music/library.json` 读取歌单，文件使用内容哈希地址复用。音乐尚未初始化时隐藏播放器。
+
+若本地剧情资源尚未准备，可设置 `CAMPUS_PREVIEW_REMOTE=https://your-site.example` 启动 Vite，读取该站点的公开剧情目录和资源版本信息；音乐仍从本地加载，协作 API 仍使用本地配置。
+
 ## 检查与打包
 
 ```sh

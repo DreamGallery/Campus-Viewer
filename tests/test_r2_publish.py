@@ -26,7 +26,7 @@ class S3:
         self.heads.append(Key)
         if Key not in self.objects: raise ClientError({'Error':{'Code':'404'}}, 'HeadObject')
         return {'Metadata':self.metadata.get(Key,{})}
-    def upload_file(self, filename, bucket, key, ExtraArgs, Callback):
+    def upload_file(self, filename, bucket, key, ExtraArgs, Callback, **kwargs):
         if self.fail and self.fail in key: raise RuntimeError('network failed')
         self.objects[key]=Path(filename).read_bytes();self.metadata[key]=ExtraArgs['Metadata'];self.uploads.append(key);Callback(len(self.objects[key]))
     def put_object(self, Bucket, Key, Body, **kwargs):

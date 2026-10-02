@@ -103,3 +103,23 @@ test('content-addressed release maps serve CSV, TXT and catalog; older releases 
   assert.equal(await data.readFile('releases/old/story','CSV/demo.csv'),'legacy');
   assert.equal(await data.readFile(roots.story,'CSV/legacy.csv'),'legacy');
 }));
+
+test('music index is independent, dynamic, and FLAC supports byte ranges',()=>fixture(async bucket=>{
+  const data=resources({RESOURCES:bucket,CAMPUS_R2_PREFIX:'music-test'});
+  const request=(path,options)=>new Request('https://site.test'+path,options);
+  assert.deepEqual((await (await data.route(request('/music/library.json'))).json()).tracks,[]);
+  const key='text/'+'a'.repeat(64)+'/music-library.json';
+  await bucket.put('music-test/'+key,JSON.stringify({schema_version:1,tracks:[{id:'song',format:'flac'}]}),{httpMetadata:{contentType:'application/json'}});
+  await bucket.put('music-test/music/current.json',JSON.stringify({schema_version:1,library:key}));
+  const response=await data.route(request('/music/library.json'));
+  assert.equal(response.headers.get('Cache-Control'),'no-store');
+  assert.equal((await response.json()).tracks[0].format,'flac');
+  const audio='media/'+'b'.repeat(64)+'/song.flac';
+  await bucket.put('music-test/'+audio,'0123456789',{httpMetadata:{contentType:'audio/flac'}});
+  const range=await data.route(request('/'+audio,{headers:{Range:'bytes=2-5'}}));
+  assert.equal(range.status,206);assert.equal(range.headers.get('Content-Type'),'audio/flac');
+  assert.equal(await range.text(),'2345');
+  await assert.rejects(()=>data.route(request('/music/secret')),{status:404});
+  await bucket.put('music-test/music/current.json',JSON.stringify({schema_version:1,library:'../secret'}));
+  await assert.rejects(()=>data.route(request('/music/library.json')),{status:503});
+}));

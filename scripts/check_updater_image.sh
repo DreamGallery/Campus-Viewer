@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory() as directory:
         assert result.getnchannels() == 2
         assert result.getsampwidth() == 2
         assert result.getframerate() == 48000
-for name in ['requests','UnityPy','PIL','Crypto.Cipher.AES','google.protobuf','boto3','campus_story_index.runtime_update','campus_story_index.r2_publish','campus_story_index.web_assets','campus_story_index.audio_extract','campus_story_index.vendor.octodb_pb2']:
+for name in ['requests','UnityPy','PIL','Crypto.Cipher.AES','google.protobuf','boto3','campus_story_index.runtime_update','campus_story_index.music_preview','campus_story_index.music_publish','campus_story_index.r2_publish','campus_story_index.web_assets','campus_story_index.audio_extract','campus_story_index.vendor.octodb_pb2']:
     importlib.import_module(name)
 result=subprocess.run(['/usr/local/bin/vgmstream-cli','-h'],capture_output=True,text=True,timeout=20)
 assert 'vgmstream' in (result.stdout+result.stderr).lower(), 'Decoder cannot execute'

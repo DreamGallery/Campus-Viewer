@@ -1,3 +1,4 @@
+import MusicPlayer from "./music/MusicPlayer";
 import {
   useEffect,
   useMemo,
@@ -745,6 +746,7 @@ export default function App() {
           非官方剧情索引 · 游戏素材 © Bandai Namco Entertainment Inc.
         </small>
       </footer>
+      <MusicPlayer />
     </>
   );
 }

@@ -8,6 +8,7 @@ import { resolve, sep } from 'node:path';
 // discover newly published files inside an external symlink without a restart.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'CAMPUS_');
+  const previewRemote = process.env.CAMPUS_PREVIEW_REMOTE;
   return {
     publicDir: process.env.CAMPUS_CLOUDFLARE_BUILD ? '.wrangler/ui-public' : 'public',
     build: { outDir: process.env.CAMPUS_CLOUDFLARE_BUILD ? '.cloudflare-dist' : 'dist' },
@@ -16,18 +17,19 @@ export default defineConfig(({ mode }) => {
       configureServer(server) {
         server.middlewares.use(async (req, res, next) => {
           const url = req.url || '';
-          const folder = url.startsWith('/audio/') ? 'audio' : url.startsWith('/catalog/') ? 'catalog' : url.startsWith('/assets/images/') ? 'assets' : null;
+          if (previewRemote && url.startsWith('/catalog/')) return next();
+          const folder = url.startsWith('/music/') ? 'music' : url.startsWith('/audio/') ? 'audio' : url.startsWith('/catalog/') ? 'catalog' : url.startsWith('/assets/images/') ? 'assets' : null;
           if (!folder) return next();
           if (req.method !== 'GET' && req.method !== 'HEAD') { res.statusCode = 405; res.end(); return; }
           try {
-            const root = folder === 'audio' ? resolve(env.CAMPUS_AUDIO_CLIPS || 'public/audio') : resolve(env.CAMPUS_WEB_DATA || 'public', folder);
+            const root = folder === 'music' ? resolve('data/music') : folder === 'audio' ? resolve(env.CAMPUS_AUDIO_CLIPS || 'public/audio') : resolve(env.CAMPUS_WEB_DATA || 'public', folder);
             const relative = decodeURIComponent(url.split('?')[0].slice(folder.length + 2));
             const file = resolve(root, relative);
             if (!file.startsWith(root + sep)) { res.statusCode = 403; res.end(); return; }
             const info = await stat(file);
             if (!info.isFile()) { res.statusCode = 404; res.end(); return; }
-            res.setHeader('Content-Type', file.endsWith('.wav') ? 'audio/wav' : file.endsWith('.json') ? 'application/json; charset=utf-8' : 'image/webp');
-            if (folder === 'audio') {
+            res.setHeader('Content-Type', file.endsWith('.mp3') ? 'audio/mpeg' : file.endsWith('.flac') ? 'audio/flac' : file.endsWith('.png') ? 'image/png' : file.endsWith('.wav') ? 'audio/wav' : file.endsWith('.json') ? 'application/json; charset=utf-8' : 'image/webp');
+            if (folder === 'audio' || folder === 'music') {
               res.setHeader('Accept-Ranges', 'bytes');
               if (req.headers.range) {
                 const match = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
@@ -47,7 +49,7 @@ export default defineConfig(({ mode }) => {
         });
       },
     }],
-    server: { proxy: { '/api': { target: 'http://127.0.0.1:8787' } } },
+    server: { proxy: { ...(previewRemote ? { '/catalog': { target: previewRemote, changeOrigin: true }, '/api/resources': { target: previewRemote, changeOrigin: true } } : {}), '/api': { target: 'http://127.0.0.1:8787' } } },
     optimizeDeps: { exclude: ['lucide-react'] },
   };
 });
