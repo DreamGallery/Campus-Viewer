@@ -20,6 +20,8 @@ docker compose logs -f updater
 
 镜像只包含代码、依赖和固定界面素材。首次启动后自动下载网站所需文本、图片和语音；初始化完成前显示进度。默认每 6 小时更新一次，失败重试，完整校验成功后才切换资源版本。数据在持久化卷中，普通升级不要执行 `down -v`。
 
+首次启动可通过 `CAMPUS_VOICE_FORMAT=flac/mp3/aac` 选择对话语音格式，MP3/AAC 支持 `CAMPUS_VOICE_BITRATE`（默认 128 kbps）；配置随 runtime 卷保存。歌曲保持 FLAC。详见[语音编码配置](docs/cloudflare-deployment.md#首次初始化选择对话语音编码)。
+
 页头显示游戏清单 revision，提供最近五个增量游戏资源包。首次仅建立下载包基线，后续按 HatsuboshiToolkit API 流程解密、分类、导出 PNG 并生成拉伸图片。网站资源初始化与全游戏增量打包是两个不同范围。
 
 详细设置、更新、备份与验证限制见 [部署说明](deploy/README.md)。

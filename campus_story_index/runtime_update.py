@@ -15,6 +15,7 @@ import traceback
 from .io import atomic_write
 from .resource_archive import prepare_archive, prune_archives
 from .audio_download import fetch_manifest
+from .voice_encoding import initialize_voice_encoding
 
 SOURCES = {
     'master': ('https://github.com/vertesan/gakumasu-diff.git', 'main'),
@@ -138,6 +139,13 @@ def update(root):
             atomic_write(root / 'status.json', status)
             (root / 'status.json').chmod(0o644)
         try:
+            phase('检查对话语音编码配置')
+            try:
+                voice_encoding = initialize_voice_encoding(root)
+            except ValueError as exc:
+                print(f'Updater: {exc}', flush=True)
+                raise
+            print(f'Updater: 对话语音编码 {voice_encoding}', flush=True)
             phase('同步文本与 masterdata')
             for key, (url, branch) in SOURCES.items():
                 if key == 'master' and master_source() == 'api':
@@ -162,7 +170,9 @@ def update(root):
             phase('下载语音资源')
             run('audio_download', '--adv', repos / 'adv/Resource', '--catalog', generated / 'story-index.json', '--config-repo', repos / 'toolkit', '--config-ref', 'HEAD', '--manifest', cache / 'audio/OctoManifest.json', '--output', cache / 'audio', '--workers', os.getenv('CAMPUS_DOWNLOAD_WORKERS', '4'))
             phase('解包语音')
-            run('audio_extract', '--directory', cache / 'audio', '--decoder', os.getenv('CAMPUS_DECODER', '/usr/local/bin/vgmstream-cli'), '--workers', os.getenv('CAMPUS_EXTRACT_WORKERS', '2'))
+            run('audio_extract', '--directory', cache / 'audio', '--decoder', os.getenv('CAMPUS_DECODER', '/usr/local/bin/vgmstream-cli'), '--workers', os.getenv('CAMPUS_EXTRACT_WORKERS', '2'),
+                '--format', voice_encoding['format'],
+                *(['--bitrate', str(voice_encoding['bitrate_kbps'])] if 'bitrate_kbps' in voice_encoding else []))
             phase('生成语音对应索引')
             run('voice_index', '--catalog', generated / 'story-index.json', '--stories', repos / 'story', '--adv', repos / 'adv/Resource', '--audio-root', cache / 'audio', '--output', generated / 'voice-index')
             phase('下载和解包网页图片')

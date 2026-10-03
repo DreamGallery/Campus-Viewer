@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => {
             if (!file.startsWith(root + sep)) { res.statusCode = 403; res.end(); return; }
             const info = await stat(file);
             if (!info.isFile()) { res.statusCode = 404; res.end(); return; }
-            res.setHeader('Content-Type', file.endsWith('.mp3') ? 'audio/mpeg' : file.endsWith('.flac') ? 'audio/flac' : file.endsWith('.png') ? 'image/png' : file.endsWith('.wav') ? 'audio/wav' : file.endsWith('.json') ? 'application/json; charset=utf-8' : 'image/webp');
+            res.setHeader('Content-Type', file.endsWith('.m4a') ? 'audio/mp4' : file.endsWith('.mp3') ? 'audio/mpeg' : file.endsWith('.flac') ? 'audio/flac' : file.endsWith('.png') ? 'image/png' : file.endsWith('.wav') ? 'audio/wav' : file.endsWith('.json') ? 'application/json; charset=utf-8' : 'image/webp');
             if (folder === 'audio' || folder === 'music') {
               res.setHeader('Accept-Ranges', 'bytes');
               if (req.headers.range) {

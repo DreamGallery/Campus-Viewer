@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 from campus_story_index.r2_publish import publish_release, UploadProgress, list_media
 
 class S3:
-    def __init__(self): self.objects={}; self.metadata={}; self.fail=None; self.uploads=[]; self.heads=[]; self.list_pages=0
+    def __init__(self): self.objects={}; self.metadata={}; self.fail=None; self.uploads=[]; self.content_types={}; self.heads=[]; self.list_pages=0
     def get_object(self, Bucket, Key):
         if Key not in self.objects: raise ClientError({'Error':{'Code':'NoSuchKey'}}, 'GetObject')
         return {'Body':io.BytesIO(self.objects[Key]),'ETag':'etag'}
@@ -28,7 +28,7 @@ class S3:
         return {'Metadata':self.metadata.get(Key,{})}
     def upload_file(self, filename, bucket, key, ExtraArgs, Callback, **kwargs):
         if self.fail and self.fail in key: raise RuntimeError('network failed')
-        self.objects[key]=Path(filename).read_bytes();self.metadata[key]=ExtraArgs['Metadata'];self.uploads.append(key);Callback(len(self.objects[key]))
+        self.content_types[key]=ExtraArgs['ContentType'];self.objects[key]=Path(filename).read_bytes();self.metadata[key]=ExtraArgs['Metadata'];self.uploads.append(key);Callback(len(self.objects[key]))
     def put_object(self, Bucket, Key, Body, **kwargs):
         if kwargs.get('IfNoneMatch') == '*' and Key in self.objects: raise RuntimeError('conflict')
         self.objects[Key]=Body
@@ -43,6 +43,18 @@ class R2Tests(unittest.TestCase):
                'resource-versions.json':json.dumps({'revision':62,'versions':[]}), 'resource-snapshot.json':'{}'}
         for name,value in files.items():
             path=stage/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(value)
+    def test_voice_formats_are_published_with_browser_audio_types(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {
+                'CAMPUS_R2_ENDPOINT':'https://test', 'CAMPUS_R2_BUCKET':'b', 'CAMPUS_R2_PREFIX':'test',
+                'AWS_ACCESS_KEY_ID':'test', 'AWS_SECRET_ACCESS_KEY':'test'}):
+            root = Path(folder); self.stage(root, 'voice'); s3 = S3()
+            for ext in ('flac', 'mp3', 'm4a'):
+                (root / 'releases/voice/audio/b' / ('clip.' + ext)).write_bytes(ext.encode())
+            publish_release(root, 'voice', s3)
+            for ext, mime in [('flac', 'audio/flac'), ('mp3', 'audio/mpeg'), ('m4a', 'audio/mp4')]:
+                key = next(k for k in s3.uploads if k.endswith('/clip.' + ext))
+                self.assertEqual(s3.content_types[key], mime)
+
     def test_atomic_failure_dedupe_and_original_release_unchanged(self):
         with tempfile.TemporaryDirectory() as d, patch.dict(os.environ,{'CAMPUS_R2_ENDPOINT':'https://test','CAMPUS_R2_BUCKET':'b','CAMPUS_R2_PREFIX':'test','AWS_ACCESS_KEY_ID':'test','AWS_SECRET_ACCESS_KEY':'test','CAMPUS_R2_PUBLIC_BASE_URL':'https://assets.test'}):
             root=Path(d);s3=S3();self.stage(root,'first')

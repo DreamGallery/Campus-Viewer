@@ -4,7 +4,7 @@
 
 ## 数据链路
 
-`story-index.json → script_id → 原始 ADV + CSV → voice_events → 音频包内部 cue → FLAC（8 级无损压缩）`
+`story-index.json → script_id → 原始 ADV + CSV → voice_events → 音频包内部 cue → FLAC / MP3 / AAC（由初始化配置决定）`
 
 CSV 的 `id` 大量重复，不能用作逐句关联键。原始 ADV 来自 Campus-adv-txts 的 `Resource/adv_*.txt`。音频获取复用了用户 HatsuboshiWebsite 中的 Octo 请求/解密及 vgmstream 解包思路，重新实现了下载、校验、缓存和关联逻辑。`vendor/octodb.proto` 与生成的 Python 协议代码来自用户提供的 HatsuboshiToolkit；不是重新设计的协议。
 
@@ -44,7 +44,7 @@ sh scripts/build_vgmstream.sh
 | `data/audio/OctoManifest.json` | 资源清单缓存 |
 | `data/audio/download-plan.json` | 需要的资源、cue 和输入快照 |
 | `data/audio/banks/` | 校验过的 ACB/AWB 原文件 |
-| `data/audio/clips/<bank>/<stream_index>.flac` | 拆分音频，使用数字流序号避免重名覆盖 |
+| `data/audio/clips/<bank>/<stream_index>.<flac/mp3/m4a>` | 拆分音频，使用数字流序号避免重名覆盖 |
 | `data/audio/bank-manifests/` | 每包的 cue、SHA-256、采样率、时长与完成记录 |
 | `data/audio/audio-files.json` | 汇总音频目录 |
 | `generated/voice-index/manifest.json` | 当前索引入口、统计、快照及分片路径 |
@@ -85,3 +85,5 @@ sh scripts/build_vgmstream.sh
 - 解包使用参数数组而非 shell 拼接；逐包暂存、校验音频头和解码器元数据、记录 SHA-256 后发布完成清单。
 - 源文件成功或失败都保留；失败单独记录。再次执行校验缓存，可以重试失败包。
 - 译文与原始脚本不改写；发布索引前校验输入未变化，保存源哈希用于追溯。
+
+对话语音默认 FLAC 8 级；Docker 首次初始化可选 MP3/AAC 及码率，详见[编码配置](cloudflare-deployment.md#首次初始化选择对话语音编码)。直接运行解包 CLI 时使用 `--format mp3 --bitrate 128` 或 `--format aac --bitrate 128`。

@@ -1,7 +1,7 @@
 name: campus-r2-updater
 services:
   updater:
-    image: ${CAMPUS_UPDATER_IMAGE:-dreamgallery/campus-r2-updater:20261003-masterdb}
+    image: ${CAMPUS_UPDATER_IMAGE:-dreamgallery/campus-r2-updater:20261003-voice-codecs}
     env_file: .env.r2.local
     environment:
       CAMPUS_MASTER_SOURCE: ${CAMPUS_MASTER_SOURCE:-api}

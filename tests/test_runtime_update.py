@@ -95,3 +95,26 @@ class MasterSourceTests(unittest.TestCase):
         from campus_story_index.runtime_update import fetch_masterdata
         with patch.dict(os.environ, {'CAMPUS_MASTER_SOURCE':'api'}), patch('campus_story_index.runtime_update.command', side_effect=RuntimeError('failed')):
             with self.assertRaises(RuntimeError): fetch_masterdata(Path('/fake'), Path('/fake/repos'))
+
+
+class VoiceRuntimeTests(unittest.TestCase):
+    def test_api_masterdb_and_selected_voice_encoding_are_used_together(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {
+                'CAMPUS_MASTER_SOURCE': 'api', 'CAMPUS_VOICE_FORMAT': 'aac',
+                'CAMPUS_VOICE_BITRATE': '96'}, clear=True):
+            root = Path(folder)
+            master = root / 'master-snapshot'
+            with patch('campus_story_index.runtime_update.sync_repo') as sync, \
+                 patch('campus_story_index.runtime_update.fetch_masterdata', return_value=(master, {'version': 'one'})), \
+                 patch('campus_story_index.runtime_update.fetch_manifest', return_value={'revision': 67}), \
+                 patch('campus_story_index.runtime_update.input_signature', return_value='new'), \
+                 patch('campus_story_index.runtime_update.command') as command, \
+                 patch('campus_story_index.runtime_update.publish', return_value='new'):
+                self.assertTrue(update(root))
+                self.assertNotIn('master', [call.args[1] for call in sync.call_args_list])
+                calls = [call.args[0] for call in command.call_args_list]
+                extract = next(args for args in calls if 'campus_story_index.audio_extract' in args)
+                self.assertEqual(extract[extract.index('--format') + 1], 'aac')
+                self.assertEqual(extract[extract.index('--bitrate') + 1], '96')
+                catalog = next(args for args in calls if 'campus_story_index' in args)
+                self.assertEqual(catalog[catalog.index('--masterdata') + 1], master)

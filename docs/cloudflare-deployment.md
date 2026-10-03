@@ -255,7 +255,7 @@ Mac 仓库根目录执行，使用自己的 Docker Hub 仓库及唯一版本号�
 
 ```sh
 docker login
-sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20261003-cf13 linux/amd64
+sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20261003-voice-codecs linux/amd64
 ```
 
 构建过程不需要 R2 密钥。`.dockerignore` 的白名单与 Dockerfile 的显式 COPY 会排除实际环境文件和下载资源。脚本逐架构验证 Python 依赖、解码器和入口后，只推送指定版本标签，不覆盖 latest，不改变当前 Docker context。跨架构仿真编译首次可能较慢。
@@ -263,7 +263,7 @@ sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20261003-cf13
 NAS 需要 Compose 和 R2 配置，另可用 `.env` 覆盖镜像版本，放在同一目录：
 
 - `deploy/nas/docker-compose.yaml` → `docker-compose.yaml`
-- 可选：`deploy/nas/.env.example` → `.env`，覆盖镜像版本或固定 digest；默认使用 `dreamgallery/campus-r2-updater:20261003-cf13`。
+- 可选：`deploy/nas/.env.example` → `.env`，覆盖镜像版本或固定 digest；默认使用 `dreamgallery/campus-r2-updater:20261003-voice-codecs`。
 - 已填好的 `deploy/.env.r2.local` → `.env.r2.local`，单独传输，不要放到 Docker Hub。
 
 在 NAS 上执行：
@@ -286,7 +286,7 @@ Compose 使用 `campus-r2-updater_runtime` 命名卷，与默认的源码构建�
 
 构建时如果默认 Debian 线路较慢，可设置 `CAMPUS_DEBIAN_MIRROR=https://mirrors.ustc.edu.cn` 再运行发布脚本，软件包签名校验保持启用。该参数只影响镜像构建，不需要放入 NAS 的 R2 环境文件。
 
-Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple` 指定镜像；默认仍使用 PyPI 官方源。当前 NAS 镜像为 `dreamgallery/campus-r2-updater:20261003-cf13`（linux/amd64）。
+Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple` 指定镜像；默认仍使用 PyPI 官方源。当前 NAS 镜像为 `dreamgallery/campus-r2-updater:20261003-voice-codecs`（linux/amd64）。
 
 
 ### R2 上传进度
@@ -295,7 +295,7 @@ Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.ed
 
 百分比按文件数计算（包含跳过和失败），不是字节比例；100% 不代表发布成功，应以最后的 `R2: 发布完成` 为准。传输量来自 SDK 回调，不含跳过的资源。发布前扫描和计算媒体校验值会先显示提示。
 
-升级 NAS 时，将现有 Compose 的镜像或 `.env` 中 `CAMPUS_UPDATER_IMAGE` 改为 `dreamgallery/campus-r2-updater:20261003-cf13`，然后执行 `docker compose pull updater` 和 `docker compose up -d updater`。保留原有挂载路径、内存限制和环境配置。
+升级 NAS 时，将现有 Compose 的镜像或 `.env` 中 `CAMPUS_UPDATER_IMAGE` 改为 `dreamgallery/campus-r2-updater:20261003-voice-codecs`，然后执行 `docker compose pull updater` 和 `docker compose up -d updater`。保留原有挂载路径、内存限制和环境配置。
 
 更新器还会输出每轮检查开始、各处理阶段及下次检查时间（UTC）；成功后默认等待 6 小时，失败后最多等待 15 分钟重试。
 
@@ -307,20 +307,39 @@ Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.ed
 
 ### 文本增量发布与无变化跳过
 
-每轮仍先拉取四个源仓库并获取游戏资源清单。根据仓库 HEAD、完整资源清单、更新器 Python 代码及 CAMPUS 配置生成摘要；仅在上次成功发布的摘要一致时跳过索引构建、解包和 R2 发布。CSV/ADV 仓库单独更新也会触发处理，不依赖游戏 revision 改变。首次升级没有摘要会正常运行一次。可临时设置 `CAMPUS_FORCE_UPDATE=1` 强制运行，完成后移除。
+每轮同步文本和工具仓库、从游戏 API 获取完整 masterdb 快照，并检查游戏资源清单；可显式设置 `CAMPUS_MASTER_SOURCE=git` 使用 Git masterdata。根据仓库 HEAD、masterdb 快照版本与 schema、完整资源清单、更新器 Python 代码及 CAMPUS 配置生成摘要；仅在上次成功发布的摘要一致时跳过索引构建、解包和 R2 发布。CSV/ADV 仓库单独更新也会触发处理，不依赖游戏 revision 改变。首次升级没有摘要会正常运行一次。可临时设置 `CAMPUS_FORCE_UPDATE=1` 强制运行，完成后移除。
 
 文本与索引采用 `text/<SHA-256>/<文件名>` 保存，发布目录中的 `file-map.json` 映射逻辑路径。未变化的 CSV/TXT 复用上一成功版本（也支持旧版直接路径），其他文件根据内容批量比对后跳过。索引包含版本链接时仍需上传相应变更；失败不会切换 current.json。不要手动删除仍被映射引用的旧发布目录或 text 对象。
 
-必须先部署本版兼容映射读取的 Workers，再升级镜像 `dreamgallery/campus-r2-updater:20261003-cf13`；Workers 同时支持 cf4 及更早的目录布局。NAS 继续保留现有挂载、限制与密钥配置，修改镜像后 pull/up 即可。
+必须先部署本版兼容映射读取的 Workers，再升级镜像 `dreamgallery/campus-r2-updater:20261003-voice-codecs`；Workers 同时支持 cf4 及更早的目录布局。NAS 继续保留现有挂载、限制与密钥配置，修改镜像后 pull/up 即可。
 
 ## 资源包解压权限
 
 从 `20260925-cf9` 起，新生成的资源包统一使用目录 `755`、文件 `644` 权限，不继承 NAS 的所有者名称或额外 ACL。已发布的旧资源包不会自动重新生成；旧包解压后若无权限，需要在解压目录中修复权限。
 
 
-### FLAC 语音
+### 首次初始化选择对话语音编码
 
-当前更新器输出 FLAC 8 级无损语音，保留采样率、位深和声道数；编码使用 `flac --verify --no-padding`。仅发布 FLAC，已验证的音频缓存会直接复用。
+新版更新器代码支持在首次启动前，通过 updater 的 `.env.r2.local` 设置：
+
+```dotenv
+CAMPUS_VOICE_FORMAT=aac
+CAMPUS_VOICE_BITRATE=128
+```
+
+| 格式 | 文件后缀 | 码率设置 |
+| --- | --- | --- |
+| `flac`（默认） | `.flac` | 留空；8 级无损压缩并校验 |
+| `mp3` | `.mp3` | 默认 128 kbps；支持 32/40/48/56/64/80/96/112/128/160/192/224/256/320 |
+| `aac` | `.m4a` | 默认 128 kbps；支持 32–320 的整数值 |
+
+码率可填写 `128` 或 `128k`，指每个文件所有声道合计的目标码率，短片段的实际平均值可能因文件头与编码帧而不同。MP3/AAC 是有损编码；AAC 使用 M4A 容器，支持浏览器播放和拖动。
+
+配置写入挂载目录 `/runtime/voice-encoding.json`。重启时可省略这两个变量，继续使用已保存的设置；显式设置与已保存值不一致时，会输出错误并停止本轮更新，不会重编码旧资源。已有 FLAC 安装会自动沿用 FLAC。需要尝试不同编码或码率时，请使用新的独立 runtime 挂载目录；不要删除正在使用的数据卷或手动修改此记录。
+
+仅影响对话语音，播放器歌曲继续使用 FLAC。索引、缓存与 R2 发布自动使用对应后缀；已校验的同格式、同码率缓存直接复用。格式不变的重启不会重新转码。
+
+本功能由 `20261003-voice-codecs` 镜像提供，保留游戏 API masterdb 获取流程，并新增 FFmpeg。`20261003-masterdb` 及更早镜像不包含此编码选项。继续使用原 FLAC 时只需更新镜像并重建容器，保留原 runtime 和账号挂载，无需新增编码配置。使用源码部署可运行 `docker compose -f deploy/compose.r2.yaml build updater` 后再启动。全 Docker 部署则在 `deploy/.env` 设置相同变量。
 
 ## 音乐资源更新
 

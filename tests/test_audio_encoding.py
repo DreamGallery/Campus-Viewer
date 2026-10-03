@@ -29,3 +29,45 @@ class AudioEncodingTests(unittest.TestCase):
             result = decode_bank({'name':'bank.acb','md5':'source'},None,root,'unused','decoder')
             self.assertEqual(result['error'],'source_not_downloaded')
             self.assertTrue(wav.exists())
+
+    def test_cache_identity_includes_format_and_bitrate(self):
+        from campus_story_index.voice_encoding import encoding_settings, audio_suffix
+        for format in ('mp3', 'aac'):
+            with self.subTest(format=format), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                settings = encoding_settings(format, 128)
+                clip = root / ('clips/bank/0001' + audio_suffix(settings))
+                clip.parent.mkdir(parents=True)
+                clip.write_bytes(b'encoded')
+                manifest = root / 'bank-manifests/bank.json'
+                manifest.parent.mkdir()
+                manifest.write_text(json.dumps({'source_md5': {'bank.acb': 'source'},
+                    'decoder_sha256': 'decoder', 'voice_encoding': settings,
+                    'clips': [{'path': str(clip.relative_to(root)), 'bytes': 7, 'sha256': file_digest(clip)}]}))
+                args = ({'name': 'bank.acb', 'md5': 'source'}, None, root, 'unused', 'decoder')
+                self.assertEqual(decode_bank(*args, settings=settings)['status'], 'cached')
+                self.assertEqual(decode_bank(*args, settings=encoding_settings(format, 192))['error'], 'source_not_downloaded')
+                self.assertEqual(decode_bank(*args)['error'], 'source_not_downloaded')
+                clip.write_bytes(b'corrupt')
+                self.assertEqual(decode_bank(*args, settings=settings)['error'], 'source_not_downloaded')
+
+    def test_encoding_failure_keeps_existing_output(self):
+        import subprocess
+        import wave
+        from campus_story_index.audio_extract import encode_audio
+        from campus_story_index.voice_encoding import encoding_settings
+        with tempfile.TemporaryDirectory() as folder:
+            wav = Path(folder) / 'clip.wav'
+            with wave.open(str(wav), 'wb') as file:
+                file.setparams((1, 2, 48000, 0, 'NONE', 'not compressed'))
+                file.writeframes(b'\0\0' * 4800)
+            target = wav.with_suffix('.m4a')
+            target.write_bytes(b'existing')
+            def fail(args, **kwargs):
+                target.with_name('.clip.m4a.tmp').write_bytes(b'partial')
+                raise subprocess.CalledProcessError(1, args)
+            with patch('campus_story_index.audio_extract.subprocess.run', side_effect=fail):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    encode_audio(wav, encoding_settings('aac', 128))
+            self.assertEqual(target.read_bytes(), b'existing')
+            self.assertFalse(target.with_name('.clip.m4a.tmp').exists())

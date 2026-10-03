@@ -137,7 +137,7 @@ def publish_release(root, release, s3=None):
         except ClientError as exc:
             if str(exc.response['Error']['Code']) not in ('404', 'NoSuchKey', 'NotFound'): raise
         s3.upload_file(str(path), bucket, prefix+'/'+key, Callback=progress.transferred, ExtraArgs={
-            'ContentType': 'application/gzip' if key.startswith('downloads/') else (mimetypes.guess_type(path.name)[0] or 'application/octet-stream'),
+            'ContentType': 'application/gzip' if key.startswith('downloads/') else ({'.flac': 'audio/flac', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4'}.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0] or 'application/octet-stream'),
             **({'ContentDisposition': 'attachment; filename="'+path.name+'"'} if key.startswith('downloads/') else {}),
             'CacheControl': 'no-store' if key.startswith('downloads/') else 'public, max-age=31536000, immutable', 'Metadata': {'sha256': sha}})
         return 'uploaded'

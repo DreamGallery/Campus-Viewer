@@ -43,6 +43,8 @@ public/images/*
 *.p12
 *.pfx
 credentials.json
+account.json
+/credentials/
 auth.json
 storage-state*.json
 storageState*.json

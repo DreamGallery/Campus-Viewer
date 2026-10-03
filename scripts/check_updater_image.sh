@@ -3,8 +3,9 @@ set -eu
 image=${1:?Usage: check_updater_image.sh IMAGE [PLATFORM]}
 platform=${2:-linux/amd64}
 docker run --rm -i --platform "$platform" --entrypoint python "$image" - <<'CHECK'
-import importlib, pathlib, subprocess, tempfile, wave, struct
-from campus_story_index.audio_extract import encode_flac
+import importlib, json, pathlib, subprocess, tempfile, wave, struct
+from campus_story_index.audio_extract import encode_flac, encode_audio
+from campus_story_index.voice_encoding import encoding_settings
 with tempfile.TemporaryDirectory() as directory:
     wav = pathlib.Path(directory) / 'test.wav'
     pcm = b''.join(struct.pack('<hh', i * 7 % 32768, -(i * 5 % 32768)) for i in range(4800))
@@ -20,7 +21,14 @@ with tempfile.TemporaryDirectory() as directory:
         assert result.getnchannels() == 2
         assert result.getsampwidth() == 2
         assert result.getframerate() == 48000
-for name in ['requests','UnityPy','PIL','Crypto.Cipher.AES','google.protobuf','boto3','campus_story_index.runtime_update','campus_story_index.music_preview','campus_story_index.music_publish','campus_story_index.r2_publish','campus_story_index.web_assets','campus_story_index.audio_extract','campus_story_index.vendor.octodb_pb2']:
+    for format in ('mp3', 'aac'):
+        for kbps in (64, 128, 192):
+            output = encode_audio(wav, encoding_settings(format, kbps))
+            probe = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_streams', '-of', 'json', str(output)]))['streams'][0]
+            assert probe['codec_name'] == format
+            assert probe['channels'] == 2 and int(probe['sample_rate']) == 48000
+            assert output.suffix == ('.m4a' if format == 'aac' else '.mp3')
+for name in ['requests','hatsuboshi_master','UnityPy','PIL','Crypto.Cipher.AES','google.protobuf','boto3','campus_story_index.runtime_update','campus_story_index.music_preview','campus_story_index.music_publish','campus_story_index.r2_publish','campus_story_index.web_assets','campus_story_index.audio_extract','campus_story_index.vendor.octodb_pb2']:
     importlib.import_module(name)
 result=subprocess.run(['/usr/local/bin/vgmstream-cli','-h'],capture_output=True,text=True,timeout=20)
 assert 'vgmstream' in (result.stdout+result.stderr).lower(), 'Decoder cannot execute'
