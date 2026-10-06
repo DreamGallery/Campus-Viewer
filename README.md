@@ -93,3 +93,5 @@ python3 scripts/package_deploy.py
 ## Cloudflare 混合部署
 
 Workers + D1 托管网页和协作接口，R2 保存资源，Docker 更新器负责解包上传。详细配置、旧桶隔离、初始化、回滚边界与测试步骤见 [Cloudflare 部署文档](docs/cloudflare-deployment.md)。
+
+页脚显示 GitHub 项目链接与网页构建版本（Git 短提交号，本地改动会标为 `local`；悬停版本可查看 UTC 构建时间）。从源码归档或 Docker 构建时，可用 `CAMPUS_BUILD_REVISION` 环境变量或同名 Docker 构建参数传入提交号。

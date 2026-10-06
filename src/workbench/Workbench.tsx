@@ -110,12 +110,13 @@ export function WorkbenchPage() {
     <span>{currentPage} / {pages} · 当日 {pageTasks.length} 项 · 北京时间</span>
     <button disabled={currentPage === pages} onClick={() => setPage(currentPage + 1)}>较早日期</button>
   </nav>;
+  const workRepositoryUrl = `https://github.com/${encodeURIComponent(auth?.work?.owner || WORK_OWNER)}/${encodeURIComponent(auth?.work?.repo || WORK_REPO)}`;
   return <main className="work-page">
     <header className="work-heading"><div className="section-title"><span className="section-en" aria-hidden="true">TRANSLATION</span><div><h1>翻译协作</h1></div></div><Login auth={auth} refresh={refresh} /></header>
     <section className="category-directory">
     {error && <p className="work-error" role="alert">{error}<button onClick={refresh}>重试</button></p>}
     {loading && <p role="status">正在读取协作信息…</p>}
-    {!loading && !error && !auth?.canCollaborate && <p className="work-access">{auth?.user ? '当前账号没有工作仓库的写权限，协作任务已隐藏。' : '登录并拥有工作仓库写权限后，可查看协作任务。'}</p>}
+    {!loading && !error && !auth?.canCollaborate && <p className="work-access">{auth?.user ? '当前账号没有' : '登录并拥有'}<a href={workRepositoryUrl} target="_blank" rel="noopener noreferrer">工作仓库</a>{auth?.user ? '的写权限，协作任务已隐藏。' : '写权限后，可查看协作任务。'}</p>}
     {auth?.canCollaborate && !loading && !error && <>
       <CompletionStats tasks={docs} login={auth.user?.login || ''} />
       {mine && <button className="back-link" onClick={() => { setMine(false); setPage(1); }}><ArrowLeft size={16} />返回全部任务</button>}

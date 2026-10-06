@@ -106,7 +106,7 @@ export default function TextUpdates() {
       </div>}
       {exportNotice && <p className="update-export-notice" role="status">{exportNotice}</p>}
       <div className="story-grid updates-group-grid">{groups.slice((current - 1) * 24, current * 24).map(group => <article key={group.id} className={`story-group ${group.images.length ? "has-art" : ""} ${group.items[0].category_id.startsWith("character") ? "update-character-group" : group.items[0].category_id.startsWith("support_card") ? "update-support-group" : ""}`}>
-        {group.images.length ? <CardPreview images={group.images} title={group.title} /> : <div className="update-art-placeholder" aria-hidden="true"><BookOpen size={38} strokeWidth={1} /></div>}
+        {group.images.length ? <CardPreview images={group.images} title={group.title} zoomable={group.items[0].category_id.split(".")[0] !== "main"} imageAspectRatio={group.items[0].category_id.split(".")[0] === "main" ? 16 / 9 : undefined} /> : <div className="update-art-placeholder" aria-hidden="true"><BookOpen size={38} strokeWidth={1} /></div>}
         <details>
           <summary>
             <div className="group-copy"><p className="eyebrow">{catalog.categories.find(c => c.id === group.items[0].category_id)?.name || '待分类'}</p><h3>{group.title}</h3><span>{group.items.length} 个章节</span>{group.items.some(r => r.pending) && <span className="pending-badge">待补全资料</span>}</div><ChevronDown size={18} className="disclosure-icon" />

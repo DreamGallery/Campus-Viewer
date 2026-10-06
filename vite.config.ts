@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from 'vite';
+import { execFileSync } from 'node:child_process';
 import react from '@vitejs/plugin-react';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
@@ -9,7 +10,16 @@ import { resolve, sep } from 'node:path';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'CAMPUS_');
   const previewRemote = process.env.CAMPUS_PREVIEW_REMOTE;
+  let revision = process.env.CAMPUS_BUILD_REVISION || 'source';
+  if (!process.env.CAMPUS_BUILD_REVISION) {
+    try {
+      revision = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      if (execFileSync('git', ['diff', 'HEAD', '--name-only'], { encoding: 'utf8' }).trim()) revision += '-local';
+    } catch { /* Source archives and Docker builds may not include Git metadata. */ }
+  }
+  const buildVersion = `${new Date().toISOString().replace(/[-:]/g, '').replace('T', '.').slice(0, 15)}-${revision}`;
   return {
+    define: { __APP_BUILD_VERSION__: JSON.stringify(buildVersion), __APP_BUILD_REVISION__: JSON.stringify(revision === 'source' ? buildVersion : revision) },
     publicDir: process.env.CAMPUS_CLOUDFLARE_BUILD ? '.wrangler/ui-public' : 'public',
     build: { outDir: process.env.CAMPUS_CLOUDFLARE_BUILD ? '.cloudflare-dist' : 'dist' },
     plugins: [react(), {
@@ -49,7 +59,7 @@ export default defineConfig(({ mode }) => {
         });
       },
     }],
-    server: { proxy: { ...(previewRemote ? { '/catalog': { target: previewRemote, changeOrigin: true }, '/api/resources': { target: previewRemote, changeOrigin: true } } : {}), '/api': { target: 'http://127.0.0.1:8787' } } },
+    server: { proxy: { ...(previewRemote ? { '/catalog': { target: previewRemote, changeOrigin: true }, '/api/resources': { target: previewRemote, changeOrigin: true } } : {}), '/api': { target: process.env.CAMPUS_API_PROXY_TARGET || env.CAMPUS_API_PROXY_TARGET || 'http://127.0.0.1:8787' } } },
     optimizeDeps: { exclude: ['lucide-react'] },
   };
 });

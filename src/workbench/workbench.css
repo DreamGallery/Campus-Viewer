@@ -36,3 +36,5 @@
 .work-editor-actions{margin-top:24px;padding-top:12px;border-top:1px solid #a8996e66}.work-editor-actions>.work-toolbar{justify-content:flex-end}
 
 .work-date-pagination{justify-content:center;text-align:center}
+
+.work-access a{color:inherit;text-decoration:underline;text-underline-offset:3px}

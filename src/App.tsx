@@ -29,6 +29,7 @@ import {
   LibraryBig,
   Sun,
   Moon,
+  Github,
 } from "lucide-react";
 import {
   CatalogContext,
@@ -525,7 +526,7 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
               key={g.id}
             >
               {g.images.length > 0 && (
-                <CardPreview images={g.images} title={g.title} />
+                <CardPreview images={g.images} title={g.title} imageAspectRatio={root === "main" ? 16 / 9 : undefined} zoomable={root !== "main"} />
               )}
               <details open={query ? true : undefined}>
                 <summary>
@@ -649,7 +650,7 @@ function ChapterPage() {
         <p className="chapter-group-title">{entry.group_title}</p>
         <h1>{data.metadata_pending ? "名称待补全" : entry.title}</h1>
         {data.metadata_pending && <p className="pending-explanation">文本已收录，剧情资料尚未关联。<Link to="/updates?view=pending">查看待补全资料</Link></p>}
-        {!!previewImages.length && <CardPreview images={previewImages} title={data.metadata_pending ? "文件名匹配预览" : entry.group_title || entry.title} />}
+        {!!previewImages.length && <CardPreview images={previewImages} imageAspectRatio={root === "main" ? 16 / 9 : undefined} zoomable={root !== "main"} title={data.metadata_pending ? "文件名匹配预览" : entry.group_title || entry.title} />}
         <div className="chapter-status">
           <span>{statusLabel[data.text_status]}</span>
           <span>{data.line_count} 条文本</span>
@@ -738,12 +739,13 @@ export default function App() {
           </CatalogContext.Provider>
         )}
       </div>
-      <footer>
+      <footer className="site-footer">
         <Link className="footer-brand" to="/">
           初星学园 <span>STORY ARCHIVE</span>
         </Link>
         <small>
-          非官方剧情索引 · 游戏素材 © Bandai Namco Entertainment Inc.
+          非官方剧情索引 · 游戏素材 <a href="https://gakuen.idolmaster-official.jp/" target="_blank" rel="noopener noreferrer">© Bandai Namco Entertainment Inc.</a>
+          <span className="footer-meta"><a href="https://github.com/DreamGallery/Campus-Viewer" target="_blank" rel="noopener noreferrer" aria-label="网页源代码 GitHub 仓库"><Github size={11} aria-hidden="true" /><span>GitHub</span></a><span aria-hidden="true">·</span><span aria-label="网页构建版本" title={`构建 ${__APP_BUILD_VERSION__}（UTC）`}>版本 · {__APP_BUILD_REVISION__}</span></span>
         </small>
       </footer>
       <MusicPlayer />

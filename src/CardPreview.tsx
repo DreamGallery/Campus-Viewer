@@ -5,12 +5,18 @@ import type { Entry } from "./catalog";
 export default function CardPreview({
   images,
   title,
+  imageAspectRatio,
+  zoomable = true,
 }: {
   images: NonNullable<Entry["group_images"]>;
   title: string;
+  imageAspectRatio?: number;
+  zoomable?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [selected, setSelected] = useState(0);
+  const selectedAspectRatio = imageAspectRatio ?? images[selected].aspect_ratio;
+  const PreviewContainer = zoomable ? "button" : "div";
   return (
     <>
       <div
@@ -20,25 +26,25 @@ export default function CardPreview({
         }}
       >
         {images.map((image, index) => (
-          <button
+          <PreviewContainer
             key={image.url}
-            className="card-preview"
-            aria-label={`放大 ${title} ${image.label}`}
-            onClick={() => {
+            className={`card-preview${zoomable ? "" : " card-preview-static"}`}
+            aria-label={zoomable ? `放大 ${title} ${image.label}` : undefined}
+            onClick={zoomable ? () => {
               setSelected(index);
               dialog.current?.showModal();
-            }}
+            } : undefined}
           >
             <img
-              style={{aspectRatio: image.preview_crop ? 3 : image.aspect_ratio || undefined, objectFit: image.preview_crop ? "cover" : undefined, objectPosition: image.preview_crop || undefined}} src={image.url}
+              style={{aspectRatio: imageAspectRatio ?? (image.preview_crop ? 3 : image.aspect_ratio || undefined), objectFit: imageAspectRatio ? "fill" : image.preview_crop ? "cover" : undefined, objectPosition: image.preview_crop || undefined}} src={image.url}
               alt={`${title} ${image.label}`}
               loading="lazy"
             />
             {images.length > 1 && <span>{image.label}</span>}
-          </button>
+          </PreviewContainer>
         ))}
       </div>
-      <dialog
+      {zoomable && <dialog
         ref={dialog}
         className="card-lightbox"
         aria-label={`${title} 卡面预览`}
@@ -57,7 +63,7 @@ export default function CardPreview({
           </button>
         </div>
         <img
-          style={{aspectRatio: images[selected].aspect_ratio || undefined, width: images[selected].aspect_ratio ? `min(100%, ${75 * images[selected].aspect_ratio!}dvh)` : undefined}} src={images[selected].url}
+          style={{aspectRatio: selectedAspectRatio || undefined, width: selectedAspectRatio ? `min(100%, ${75 * selectedAspectRatio}dvh)` : undefined, objectFit: imageAspectRatio ? "fill" : undefined}} src={images[selected].url}
           alt={`${title} ${images[selected].label}`}
         />
         {images.length > 1 && (
@@ -73,7 +79,7 @@ export default function CardPreview({
             ))}
           </div>
         )}
-      </dialog>
+      </dialog>}
     </>
   );
 }

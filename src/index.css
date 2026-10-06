@@ -1387,3 +1387,13 @@ b, strong { font-weight: 600; }
   .character-hero { scrollbar-width: none; }
   .character-hero::-webkit-scrollbar { display: none; }
 }
+
+.site-footer .footer-meta{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:4px 8px;margin-top:4px;font-size:10px;line-height:1.5;color:inherit;overflow-wrap:anywhere}
+.site-footer .footer-meta a{display:inline-flex;align-items:center;gap:6px;color:inherit;text-decoration:none}
+.site-footer .footer-meta a:hover{text-decoration:underline;text-underline-offset:3px}
+.site-footer .footer-meta svg{flex-shrink:0}
+
+.site-footer small a{color:inherit;text-decoration:none}
+.site-footer small a:hover{text-decoration:underline;text-underline-offset:3px}
+
+.card-preview-static { cursor: default; }

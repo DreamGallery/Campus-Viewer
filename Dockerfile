@@ -8,7 +8,8 @@ COPY campus_story_index/official_profiles.json ./campus_story_index/official_pro
 COPY public/theme-init.js ./public/theme-init.js
 COPY public/images ./public/images
 COPY public/fonts/*LICENSE.txt ./public/fonts/
-RUN npm run build
+ARG CAMPUS_BUILD_REVISION=source
+RUN CAMPUS_BUILD_REVISION="$CAMPUS_BUILD_REVISION" npm run build
 
 FROM nginx:stable-alpine
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
