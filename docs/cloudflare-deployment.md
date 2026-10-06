@@ -11,7 +11,7 @@
 - Docker 更新器：同步 GitHub → 下载/解包 → 生成索引 → 完整上传 → 更新 `current.json`。
 - GitHub 工作仓库仍是翻译、校对、任务和操作记录的权威来源，D1 不存储这些业务数据。
 
-更新器必须运行在有足够磁盘、能访问 GitHub 和游戏资源服务器的电脑、NAS 或服务器上；不是运行在普通 Workers 中。首次初始化仍会下载网站所需的图片和语音；“首次只建立基线”仅指全游戏增量包，不代表初始化无需下载。
+更新器必须运行在有足够磁盘、能访问 GitHub 和游戏资源服务器的 Linux 服务器或本地 Docker 主机上；不是运行在普通 Workers 中。首次初始化仍会下载网站所需的图片和语音；“首次只建立基线”仅指全游戏增量包，不代表初始化无需下载。
 
 ## 2. 已知配置与需要准备的信息
 
@@ -247,26 +247,26 @@ Wrangler 部署只上传本地构建到 Cloudflare，**不需要先推送 GitHub
 
 官方参考：[Workers Node HTTP](https://developers.cloudflare.com/workers/runtime-apis/nodejs/http/)、[Workers SPA](https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/)、[R2 绑定](https://developers.cloudflare.com/r2/api/workers/workers-api-usage/)、[R2 S3 兼容性](https://developers.cloudflare.com/r2/api/s3/api/)、[D1 预编译语句](https://developers.cloudflare.com/d1/worker-api/prepared-statements/)。
 
-## 12. Mac 构建并推送 Docker Hub，Debian/NAS 只拉取镜像
+## 12. Mac 构建并推送 Docker Hub，Linux 服务器只拉取镜像
 
-Mac 需要已启动的 Docker Engine（Docker Desktop 或 Colima），以及 Buildx。Apple Silicon 为 ARM64，如果 NAS 为 x86_64，必须构建 linux/amd64；也可发布包含 amd64、arm64 的多架构镜像。Docker 会自动选取匹配 NAS 的架构。
+Mac 需要已启动的 Docker Engine（Docker Desktop 或 Colima），以及 Buildx。Apple Silicon 为 ARM64，如果 Linux 服务器为 x86_64，必须构建 linux/amd64；也可发布包含 amd64、arm64 的多架构镜像。Docker 会自动选取匹配 Linux 服务器的架构。
 
 Mac 仓库根目录执行，使用自己的 Docker Hub 仓库及唯一版本号：
 
 ```sh
 docker login
-sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20261003-voice-codecs linux/amd64
+sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20261006-audio-slim linux/amd64
 ```
 
 构建过程不需要 R2 密钥。`.dockerignore` 的白名单与 Dockerfile 的显式 COPY 会排除实际环境文件和下载资源。脚本逐架构验证 Python 依赖、解码器和入口后，只推送指定版本标签，不覆盖 latest，不改变当前 Docker context。跨架构仿真编译首次可能较慢。
 
-NAS 需要 Compose 和 R2 配置，另可用 `.env` 覆盖镜像版本，放在同一目录：
+Linux 服务器需要 Compose 和 R2 配置，另可用 `.env` 覆盖镜像版本，放在同一目录：
 
 - `deploy/nas/docker-compose.yaml` → `docker-compose.yaml`
-- 可选：`deploy/nas/.env.example` → `.env`，覆盖镜像版本或固定 digest；默认使用 `dreamgallery/campus-r2-updater:20261003-voice-codecs`。
+- 可选：`deploy/nas/.env.example` → `.env`，覆盖镜像版本或固定 digest；默认使用 `dreamgallery/campus-r2-updater:20261006-audio-slim`。
 - 已填好的 `deploy/.env.r2.local` → `.env.r2.local`，单独传输，不要放到 Docker Hub。
 
-在 NAS 上执行：
+在 Linux 服务器上执行：
 
 ```sh
 chmod 600 .env.r2.local
@@ -276,17 +276,17 @@ docker compose up -d
 docker compose logs -f --tail=100 updater
 ```
 
-旧版 `docker-compose` 可使用相应命令，但建议安装 Docker Compose v2 插件。私有 Docker Hub 仓库需要在 NAS 上先 `docker login`。此部署不需要监听端口、特权模式或挂载 Docker socket。
+旧版 `docker-compose` 可使用相应命令，但建议安装 Docker Compose v2 插件。私有 Docker Hub 仓库需要在 Linux 服务器上先 `docker login`。此部署不需要监听端口、特权模式或挂载 Docker socket。
 
 升级时先修改 `.env` 中的镜像版本，再执行 `docker compose pull && docker compose up -d`。游戏资源由容器内部每六小时更新，不依赖镜像重建；只有更新器代码变化才需发布新镜像。
 
 Compose 使用 `campus-r2-updater_runtime` 命名卷，与默认的源码构建版本项目/卷名称一致。在同一 Docker 主机迁移时，先停止旧容器再启动新配置，勿删除数据卷、勿同时启动两个更新器。命名卷实际名称可用 `docker volume ls` 核对。
 
-本地构建不等于已验证 NAS 的完整冷启动。首次部署请观察日志，确认下载、解包和 R2 发布完整成功后，再进行网站资源验收。
+本地构建不等于已验证 Linux 服务器的完整冷启动。首次部署请观察日志，确认下载、解包和 R2 发布完整成功后，再进行网站资源验收。
 
-构建时如果默认 Debian 线路较慢，可设置 `CAMPUS_DEBIAN_MIRROR=https://mirrors.ustc.edu.cn` 再运行发布脚本，软件包签名校验保持启用。该参数只影响镜像构建，不需要放入 NAS 的 R2 环境文件。
+构建时如果默认 Debian 线路较慢，可设置 `CAMPUS_DEBIAN_MIRROR=https://mirrors.ustc.edu.cn` 再运行发布脚本，软件包签名校验保持启用。该参数只影响镜像构建，不需要放入 Linux 服务器的 R2 环境文件。
 
-Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple` 指定镜像；默认仍使用 PyPI 官方源。当前 NAS 镜像为 `dreamgallery/campus-r2-updater:20261003-voice-codecs`（linux/amd64）。
+Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple` 指定镜像；默认仍使用 PyPI 官方源。当前 Linux 服务器镜像为 `dreamgallery/campus-r2-updater:20261006-audio-slim`（linux/amd64）。
 
 
 ### R2 上传进度
@@ -295,7 +295,7 @@ Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.ed
 
 百分比按文件数计算（包含跳过和失败），不是字节比例；100% 不代表发布成功，应以最后的 `R2: 发布完成` 为准。传输量来自 SDK 回调，不含跳过的资源。发布前扫描和计算媒体校验值会先显示提示。
 
-升级 NAS 时，将现有 Compose 的镜像或 `.env` 中 `CAMPUS_UPDATER_IMAGE` 改为 `dreamgallery/campus-r2-updater:20261003-voice-codecs`，然后执行 `docker compose pull updater` 和 `docker compose up -d updater`。保留原有挂载路径、内存限制和环境配置。
+升级 Linux 服务器时，将现有 Compose 的镜像或 `.env` 中 `CAMPUS_UPDATER_IMAGE` 改为 `dreamgallery/campus-r2-updater:20261006-audio-slim`，然后执行 `docker compose pull updater` 和 `docker compose up -d updater`。保留原有挂载路径、内存限制和环境配置。
 
 更新器还会输出每轮检查开始、各处理阶段及下次检查时间（UTC）；成功后默认等待 6 小时，失败后最多等待 15 分钟重试。
 
@@ -311,11 +311,11 @@ Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.ed
 
 文本与索引采用 `text/<SHA-256>/<文件名>` 保存，发布目录中的 `file-map.json` 映射逻辑路径。未变化的 CSV/TXT 复用上一成功版本（也支持旧版直接路径），其他文件根据内容批量比对后跳过。索引包含版本链接时仍需上传相应变更；失败不会切换 current.json。不要手动删除仍被映射引用的旧发布目录或 text 对象。
 
-必须先部署本版兼容映射读取的 Workers，再升级镜像 `dreamgallery/campus-r2-updater:20261003-voice-codecs`；Workers 同时支持 cf4 及更早的目录布局。NAS 继续保留现有挂载、限制与密钥配置，修改镜像后 pull/up 即可。
+必须先部署本版兼容映射读取的 Workers，再升级镜像 `dreamgallery/campus-r2-updater:20261006-audio-slim`；Workers 同时支持 cf4 及更早的目录布局。Linux 服务器继续保留现有挂载、限制与密钥配置，修改镜像后 pull/up 即可。
 
 ## 资源包解压权限
 
-从 `20260925-cf9` 起，新生成的资源包统一使用目录 `755`、文件 `644` 权限，不继承 NAS 的所有者名称或额外 ACL。已发布的旧资源包不会自动重新生成；旧包解压后若无权限，需要在解压目录中修复权限。
+从 `20260925-cf9` 起，新生成的资源包统一使用目录 `755`、文件 `644` 权限，不继承 Linux 服务器的所有者名称或额外 ACL。已发布的旧资源包不会自动重新生成；旧包解压后若无权限，需要在解压目录中修复权限。
 
 
 ### 首次初始化选择对话语音编码
@@ -349,6 +349,18 @@ CAMPUS_VOICE_BITRATE=128
 - `CAMPUS_MUSIC_IDS`：可选，空格分隔的 Music ID；不设置则自动跟随 masterdata 和资源清单。
 - 缓存目录：`/runtime/cache/music-source`；可播放资源：`/runtime/cache/music`。
 - 音乐和剧情使用各自的原子发布指针。音乐文件全部上传并校验完成后，才更新 R2 `<prefix>/music/current.json`；中断时旧歌单仍可访问，重试复用已上传文件。
-- 先部署包含 `/music/*` 路由的 Workers，再更新 NAS 镜像。无需新增密钥、R2 桶或 D1 表，保留原有挂载和内存限制。
+- 先部署包含 `/music/*` 路由的 Workers，再更新 Linux 服务器镜像。无需新增密钥、R2 桶或 D1 表，保留原有挂载和内存限制。
 
 文件名含内容哈希，旧版本文件不自动删除。镜像不包含下载资源；音乐资源在运行后初始化。歌词没有匹配的演出时间轴时显示缺失提示，不生成猜测歌词。
+
+### 精简音频编码器构建
+
+更新器使用 `scripts/build_ffmpeg_audio.sh` 从固定版本、带 SHA-256 校验的 FFmpeg 源码构建，仅保留 WAV/PCM、FLAC、MP3 和 AAC/M4A 的读取、编码与校验功能。运行镜像不安装 Debian 完整 `ffmpeg` 软件包及其视频、桌面相关依赖。游戏音频解包仍使用 vgmstream，对话编码选项与歌曲 FLAC 格式保持不变。
+
+本地构建与验证（不会推送 Docker Hub）：
+
+```bash
+docker buildx build --platform linux/amd64 --load \
+  -t campus-r2-updater:audio-slim -f docker/Dockerfile.updater .
+sh scripts/check_updater_image.sh campus-r2-updater:audio-slim linux/amd64
+```

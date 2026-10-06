@@ -36,6 +36,7 @@
 !campus_story_index/**
 !scripts/
 !scripts/build_vgmstream.sh
+!scripts/build_ffmpeg_audio.sh
 !scripts/verify_web_export.py
 **/__pycache__
 **/*.pyc

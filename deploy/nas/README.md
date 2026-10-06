@@ -1,8 +1,8 @@
-# Debian / NAS：从 Docker Hub 运行资源更新器
+# Linux 服务器（如 Debian / Ubuntu）：从 Docker Hub 运行资源更新器
 
-镜像：`dreamgallery/campus-r2-updater:20261003-voice-codecs`，架构 `linux/amd64`。
+镜像：`dreamgallery/campus-r2-updater:20261006-audio-slim`，架构 `linux/amd64`。
 
-1. 将 `docker-compose.yaml` 放入 NAS 的专用目录。
+1. 将 `docker-compose.yaml` 放入 Linux 服务器的专用目录。
 2. 将已经填写的 `.env.r2.local` 单独复制到同一目录，执行 `chmod 600 .env.r2.local`。不要将它上传 Docker Hub 或 GitHub。
 3. 创建私有目录，放入专用游戏账号的 `account.json`（`{"refresh_token":"..."}`），目录权限 700、文件 600。在 `.env` 中设置 `HATSUBOSHI_CREDENTIALS_DIR=/绝对路径/账号目录`。令牌只挂载到容器，不写入镜像。
 4. 在该目录运行：
