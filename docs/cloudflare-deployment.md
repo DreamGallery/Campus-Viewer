@@ -1,368 +1,157 @@
-# Cloudflare Workers + R2 + Docker 更新器部署
+# Cloudflare Workers + R2 + Docker 更新器
 
-本文对应主分支 `main`。原有 `deploy/compose.yaml` 完整 Docker 部署仍然有效。不要同时向同一 R2 前缀运行多个更新器。
+Workers 托管网页和协作接口，D1 保存登录会话，R2 保存游戏资源；Docker 更新器负责下载、解包、生成索引和上传。译文、草稿与协作任务保存在 GitHub 工作仓库。
 
-## 1. 结构与数据流
+## 准备配置
 
-- Workers Static Assets：React 网页、字体、固定 UI 图片，不包含下载的游戏资源。
-- Workers API：复用 `server/app.mjs` 的 OAuth、仓库权限检查、协作读写、冲突检查逻辑。
-- D1：保存 OAuth 临时状态和会话。cookie 标识取 SHA-256 后入库，GitHub token 等数据使用 AES-GCM 加密；密钥在 Workers Secret 中。OAuth 状态通过 SQL 原子消费，防止重复回调。
-- R2：剧情索引、CSV、TXT、图片、语音和最近五个增量资源包。
-- Docker 更新器：同步 GitHub → 下载/解包 → 生成索引 → 完整上传 → 更新 `current.json`。
-- GitHub 工作仓库仍是翻译、校对、任务和操作记录的权威来源，D1 不存储这些业务数据。
+需要 Cloudflare 的 Workers、R2、D1 权限，GitHub OAuth App，以及 Node.js 22.12+、Docker 和 Compose v2。
 
-更新器必须运行在有足够磁盘、能访问 GitHub 和游戏资源服务器的 Linux 服务器或本地 Docker 主机上；不是运行在普通 Workers 中。首次初始化仍会下载网站所需的图片和语音；“首次只建立基线”仅指全游戏增量包，不代表初始化无需下载。
-
-## 2. 已知配置与需要准备的信息
-
-本文以桶名 `your-bucket`、资源域名 `https://assets.example.com` 为例，部署时请替换为自己的配置。实际账号及桶配置应写入被 Git 忽略的 `wrangler.local.jsonc` 和 `deploy/.env.r2.local`，不要提交到仓库。
-
-需要准备：
-
-1. Cloudflare 账号的 Workers、R2 和 D1 使用权限。
-2. R2 的 Access Key ID / Secret Access Key，权限为指定桶的 Object Read & Write。它们只放更新器环境文件，不放前端或 Worker。
-3. 网站域名；可以先使用 Cloudflare 分配的 `workers.dev` 地址。
-4. 一个 GitHub OAuth App 的 Client ID 和 Client Secret。
-5. Node.js 22、npm；更新器主机安装 Docker Engine/Desktop 和 Docker Compose 插件。
-
-`assets.example.com` 是资源域名，不是默认的网站域名。两者可以独立。不要把网站 Worker 路由覆盖到现有 R2 域名。
-
-## 3. 本地文件与保密范围
-
-| 文件 | 用途 | 提交 Git |
-| --- | --- | --- |
-| `wrangler.jsonc` | 可复用 Worker 配置模板 | 是 |
-| `wrangler.local.jsonc` | 实际账号、桶名、D1 ID、站点域名 | 否 |
-| `.dev.vars` | 本地 OAuth 和会话密钥 | 否 |
-| `.dev.vars.example` | 空白示例 | 是 |
-| `deploy/.env.r2.local` | 更新器真实 R2 配置 | 否 |
-| `deploy/.env.r2.example` | 更新器配置示例 | 是 |
-| `.wrangler/` | 本地模拟数据库、R2 和开发缓存 | 否 |
-| `.cloudflare-dist/` | 仅用于 Workers 的构建输出 | 否 |
-
-不要将 S3 Secret、OAuth Secret、SESSION_SECRET 发到聊天或提交到 Git。Cloudflare 登录凭证也不需要写进项目代码。
-
-## 4. 安装与本地测试
-
-以下命令在仓库根目录运行：
+以下命令在仓库根目录运行，已有配置文件请保留：
 
 ```sh
 npm ci
-npm run build:cloudflare
-npm run test:api
-npm run test:workbench
-npm run test:cloudflare
+cp wrangler.jsonc wrangler.local.jsonc
+npx wrangler login
+npx wrangler d1 create campus-auth
 ```
 
-`build:cloudflare` 先从固定素材白名单构建 `.cloudflare-dist`，再执行 Wrangler dry-run，**不会部署到远端**。不要直接把本机普通 `dist` 上传到 Workers：旧的 `public` 资源链接可能使它包含大量游戏数据。
+在 `wrangler.local.jsonc` 中填写：
 
-若本地配置不存在，先复制：
+| 配置 | 内容 |
+| --- | --- |
+| `account_id` | R2 所在 Cloudflare 账号 |
+| `r2_buckets[0].bucket_name` | 现有桶名，绑定名保留 `RESOURCES` |
+| `d1_databases[0].database_id` | 创建 D1 时返回的 ID，绑定名保留 `DB` |
+| `vars.CAMPUS_PUBLIC_ORIGIN` | 网站地址，例如 `https://story.example.com` |
+| `vars.CAMPUS_R2_PREFIX` | 专用资源前缀，默认 `campus-v1` |
+| `vars.CAMPUS_R2_PUBLIC_BASE_URL` | 可选资源域名，例如 `https://assets.example.com`，不含前缀 |
+| `vars.CAMPUS_WORK_OWNER`、`vars.CAMPUS_WORK_REPO`、`vars.CAMPUS_WORK_BRANCH` | 默认工作仓库为 `chihya72/gakumas-translation-work` 的 `main` |
+
+网站与资源使用各自的域名；资源域名需绑定到 R2 桶。未配置公开资源域名时，文件通过 Worker 读取。实际配置、账号和密钥文件已由 Git 忽略，不提交仓库。
+
+## 登录与网页部署
+
+GitHub OAuth App 的 Homepage 填网站地址，Callback 填 `<网站地址>/api/auth/callback`。
 
 ```sh
-cp wrangler.jsonc wrangler.local.jsonc
-cp .dev.vars.example .dev.vars
-cp deploy/.env.r2.example deploy/.env.r2.local
+npx wrangler d1 migrations apply campus-auth --remote --config wrangler.local.jsonc
+npx wrangler secret put GITHUB_CLIENT_ID --config wrangler.local.jsonc
+npx wrangler secret put GITHUB_CLIENT_SECRET --config wrangler.local.jsonc
+npx wrangler secret put SESSION_SECRET --config wrangler.local.jsonc
+npm run build:cloudflare
+npx wrangler deploy --config wrangler.local.jsonc
 ```
 
-已有文件不要覆盖。`.dev.vars` 中填写：
+`SESSION_SECRET` 使用至少 32 字符的随机值，可用 `openssl rand -hex 32` 生成。更换它会使已有会话失效；正常重新部署保留 D1 会话。只有工作仓库有写权限的用户能查看与提交协作任务。
 
-```dotenv
-GITHUB_CLIENT_ID=你的客户端ID
-GITHUB_CLIENT_SECRET=你的客户端密钥
-SESSION_SECRET=至少32字符的随机密钥
-```
+`build:cloudflare` 只打包代码、字体与固定界面素材，并进行部署预检查；随后执行 `wrangler deploy` 才会上线。自定义网站域名在 Worker 的 Domains & Routes 中配置，并与 OAuth 回调和 `CAMPUS_PUBLIC_ORIGIN` 保持一致。
 
-可以使用 `openssl rand -hex 32` 生成 SESSION_SECRET。不要使用示例字符串作为正式密钥。
+本地预览可复制 `.dev.vars.example` 为 `.dev.vars` 并填写密钥，然后运行：
 
 ```sh
 npx wrangler d1 migrations apply campus-auth --local --config wrangler.local.jsonc
 npx wrangler dev --config wrangler.local.jsonc --port 8788
 ```
 
-访问 `http://127.0.0.1:8788`。本地默认使用模拟 R2/D1，不读取真实桶；没有模拟资源时显示等待初始化是正常行为。不要添加 `remote: true`，除非明确准备测试真实资源。
+本地默认使用模拟 R2 / D1，无资源时显示等待初始化；OAuth 回调使用 `http://127.0.0.1:8788/api/auth/callback`。`.dev.vars` 不会自动同步为正式 Secret。
 
-本地 OAuth App 设置：Homepage 为 `http://127.0.0.1:8788`，回调为 `http://127.0.0.1:8788/api/auth/callback`。原来的 5173 开发环境仍可单独运行。
+## Docker 更新器
 
-## 5. 准备 Cloudflare 资源
+按 [Docker 更新器说明](../deploy/docker/README.md)准备 `docker-compose.yaml`、`.env`、`.env.r2.local` 和游戏账号目录，然后拉取镜像启动。默认使用游戏 API masterdb 和 Toolkit 的 `API` 分支；设置 `CAMPUS_MASTER_SOURCE=git` 可改用 Git masterdata。
 
-```sh
-npx wrangler login
-npx wrangler whoami
-npx wrangler d1 create campus-auth
-```
+`.env.r2.local` 的主要设置：
 
-D1 创建成功后，将返回的数据库 ID 填入 `wrangler.local.jsonc` 的 `d1_databases[0].database_id`。确认：
-
-- `account_id` 是桶所在账号。
-- `r2_buckets[0].bucket_name` 是 `your-bucket`，binding 为 `RESOURCES`。
-- D1 binding 为 `DB`。
-- `CAMPUS_R2_PREFIX` 是专用前缀 `campus-v1`，与更新器完全一致。
-- `CAMPUS_PUBLIC_ORIGIN` 改为最终网站 origin，例如 `https://story.example.com`，不带子路径。
-- `CAMPUS_R2_PUBLIC_BASE_URL` 可设为 `https://assets.example.com`，不包含 `campus-v1`。
-
-本地配置中设置公开资源域名时，下载包接口会在检查最近五版白名单后跳转至该域名。未配置公开域名时，Worker 会通过 R2 binding 流式返回文件，支持 HEAD 和单段 Range。
-
-创建正式 D1 表：
-
-```sh
-npx wrangler d1 migrations apply campus-auth --remote --config wrangler.local.jsonc
-```
-
-这是实际远端写操作。D1 只用于会话，不要共用已有其他业务的同名表。
-
-## 6. GitHub OAuth 与正式密钥
-
-在 GitHub OAuth App 中设置最终站点地址与回调：
-
-```text
-Homepage URL: https://你的站点域名
-Callback URL: https://你的站点域名/api/auth/callback
-```
-
-通过交互命令填写正式密钥：
-
-```sh
-npx wrangler secret put GITHUB_CLIENT_ID --config wrangler.local.jsonc
-npx wrangler secret put GITHUB_CLIENT_SECRET --config wrangler.local.jsonc
-npx wrangler secret put SESSION_SECRET --config wrangler.local.jsonc
-```
-
-本地 `.dev.vars` 不会自动成为正式 Secret。修改 SESSION_SECRET 会使已有会话无法解密，需要重新登录；正常重启/重新部署不会丢失 D1 中的会话。会话最长八小时，失效后重新登录；目前不自动刷新 GitHub token。
-
-`CAMPUS_WORK_OWNER` / `CAMPUS_WORK_REPO` / `CAMPUS_WORK_BRANCH` 控制协作仓库，默认仍为 `chihya72/gakumas-translation-work` 的 `main`。没有写权限的账号不能查看协作任务或提交。
-
-## 7. R2 域名与缓存
-
-确认桶的设置中已把 `assets.example.com` 绑定为公开自定义域名，并且 Cloudflare DNS 正常。
-
-新对象布局：
-
-```text
-campus-v1/
-  current.json                         # 最后切换的发布指针，no-store
-  media/<sha256>/<filename>             # 去重图片、语音，长期缓存
-  releases/<release>/web/catalog/...    # 不可变目录和章节索引
-  releases/<release>/story/CSV/...      # 原文 CSV
-  releases/<release>/adv/...            # 原始 TXT
-  releases/<release>/resource-snapshot.json
-  releases/<release>/resource-versions.json
-  downloads/campus-resources-r....tar.gz
-```
-
-图片/语音链接在上传时改写为内容地址；本机 Docker 的原始索引不受影响。索引按发布版本寻址，更新后已经打开的页面仍能读取原版本目录。
-
-静态媒体可以对 `campus-v1/media/` 设置缓存规则。**不要给整个桶设置忽略源站缓存头的永久缓存**：`current.json` 和下载包不应缓存。不要给 `campus-v1/` 整个前缀添加短期自动删除规则。
-
-网页索引和 API 通过同源 Worker 读取，普通图片和 audio 标签可以直接使用资源域名；如果将来添加浏览器 `fetch` 音频或画布读取图片，可在 R2 CORS 中允许站点 origin 的 GET/HEAD，允许 Range 并暴露 Content-Length、Content-Range、ETag。不要为上传开放浏览器写权限。
-
-## 8. Docker 更新器
-
-编辑 `deploy/.env.r2.local`：
-
-| 变量 | 含义 |
+| 变量 | 内容 |
 | --- | --- |
-| `CAMPUS_R2_ENDPOINT` | 桶设置中的 S3 API endpoint，一般为 `https://<account>.r2.cloudflarestorage.com`；特殊 jurisdiction 使用控制台实际地址 |
-| `CAMPUS_R2_BUCKET` | `your-bucket` |
-| `CAMPUS_R2_PREFIX` | `campus-v1` |
-| `AWS_ACCESS_KEY_ID` | R2 S3 Access Key ID |
-| `AWS_SECRET_ACCESS_KEY` | R2 S3 Secret Access Key |
-| `CAMPUS_R2_PUBLIC_BASE_URL` | `https://assets.example.com`；空白则媒体通过 Worker |
-| `CAMPUS_UPDATE_INTERVAL` | 成功后检查间隔，默认 21600 秒（六小时） |
-| `CAMPUS_DOWNLOAD_WORKERS` | 下载并行度，默认 4 |
-| `CAMPUS_EXTRACT_WORKERS` | 解包并行度，默认 2 |
-| `CAMPUS_UPLOAD_WORKERS` | 上传并行度，默认 4 |
+| `CAMPUS_R2_ENDPOINT` | R2 控制台提供的 S3 API endpoint |
+| `CAMPUS_R2_BUCKET` | 桶名，与 Worker 相同 |
+| `CAMPUS_R2_PREFIX` | 专用前缀，与 Worker 相同 |
+| `AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY` | 限定该桶的 Object Read & Write 密钥，需能列举对象 |
+| `CAMPUS_R2_PUBLIC_BASE_URL` | 可选资源域名，不含前缀，与 Worker 相同 |
+| `CAMPUS_UPDATE_INTERVAL` | 每轮完成后的检查间隔，默认 `21600` 秒 |
+| `CAMPUS_DOWNLOAD_WORKERS` | 下载并发，默认 `4` |
+| `CAMPUS_EXTRACT_WORKERS` | 解包并发，默认 `2` |
+| `CAMPUS_UPLOAD_WORKERS` | 上传并发，默认 `4` |
 
-先单次初始化，检查日志再启用循环：
+游戏账号目录通过 `.env` 中的 `HATSUBOSHI_CREDENTIALS_DIR` 挂载为 `/credentials`，不要仅写在服务的 `.env.r2.local` 中。账号目录保持可写，以保存轮换后的令牌。
 
-```sh
-docker compose -f deploy/compose.r2.yaml build updater
-docker compose -f deploy/compose.r2.yaml run --rm updater python -m campus_story_index.runtime_update --once
-docker compose -f deploy/compose.r2.yaml up -d
-docker compose -f deploy/compose.r2.yaml logs -f --tail=100 updater
-```
-
-容器首次运行会克隆必要仓库、下载网站所需资源并解包。全游戏资源包首次只保存 baseline；之后 revision 改变才打包新增/变化资源，包含既有图片拉伸处理，保留最近五包。
-
-更新器的 `/runtime` 使用持久卷，保存 Git 仓库、缓存、baseline、发布快照。**不要执行 `down -v`**，它会删除基线和下载缓存。定期备份该卷。
-
-已初始化本地 Docker 资源但还没上传时，也可以只执行上传：
+首次运行会下载网站所需的文本、图片、语音和音乐。后续同时检查游戏资源、masterdb、CSV / TXT 仓库以及更新器代码和配置；文本仓库单独更新也会触发处理。无变化时跳过构建和上传。
 
 ```sh
-docker compose -f deploy/compose.r2.yaml run --rm updater python -m campus_story_index.r2_publish
-```
-
-该命令要求同一持久卷已有 `current` 发布。原完整 Docker compose 与新 compose 默认项目名不同，卷不会自动共享；迁移已有卷应显式配置 `external` 卷及真实卷名。
-
-## 9. 发布一致性、失败与保留策略
-
-1. 上传媒体，按 SHA-256 和对象元数据跳过已存在的同内容文件。
-2. 上传独立版本的索引、CSV/TXT、快照和增量包。
-3. 使用 ETag 条件更新 `current.json`，拒绝并发覆盖。
-4. 切换本地 `current`，更新本地状态。
-5. 删除上一版本列表中已超出最近五版的包，只处理本项目前缀内明确记录的文件。
-
-上传中断时远端指针不变，旧站点继续可用。失败每至多十五分钟重试。远端状态接口显示的是**最后成功发布状态**，不会展示尚未上传成功的本地错误，失败详情看 Docker 日志。
-
-旧桶其他前缀不会读取、覆盖或删除。媒体和章节快照暂不自动垃圾回收，以支持已打开的页面和回滚；历史文本版本会占用存储，应根据实际用量安排维护。失败上传也可能留下未引用的对象，不会被网站展示。
-
-如果远端已发布但本地卷丢失，更新器会拒绝重新建立 baseline。应恢复卷备份；确实要全新开始时，使用新的专用前缀并同步修改 Worker 配置。若远端指针切换成功后本机异常退出，先核对远端 release 与本地 `releases/`，恢复本地 `current` 至同一 release，再继续更新。不要直接删除远端指针绕过保护。
-
-## 10. 正式部署与验收
-
-本地检查全部通过、账号配置确认后：
-
-```sh
-npm run build:cloudflare
-npx wrangler deploy --config wrangler.local.jsonc
-```
-
-Wrangler 部署只上传本地构建到 Cloudflare，**不需要先推送 GitHub，也不会推送 Git 分支**。如启用 Git 自动部署，请明确选择混合部署分支。
-
-若使用自定义域名，可在 Cloudflare Worker 的 Settings → Domains & Routes 添加，并同步更新 OAuth App 和 `CAMPUS_PUBLIC_ORIGIN`。可以使用独立测试站点与测试前缀，避免测试污染正式发布。
-
-上线验收：
-
-- `/api/health` 返回 `ok: true`。
-- 初始化前目录显示等待资源；发布后角色、辅助卡、活动和更新页面正常。
-- `catalog/manifest.json` 的 base_path 带 release，图片和语音指向预期资源域名。
-- 语音播放、拖动、暂停正常；下载包的 HEAD/Range 可用。
-- 登录后刷新和重新部署仍保持会话；退出后旧 cookie 无效。
-- 无权限账号看不到任务，有权限账号能读取任务；提交测试需选用专门测试工作仓库。
-- 章节 CSV/TXT 导出、格式校验及语音匹配正常。
-- 新版上传失败时旧版仍可访问；成功后资源版本更新，只有最近五包显示。
-- 检查 Workers CPU、D1 操作量、R2 存储和请求用量，再决定是否升级套餐。
-
-## 11. 故障定位
-
-| 现象 | 排查方向 |
-| --- | --- |
-| 一直等待初始化 | Docker 是否成功、桶名/前缀是否一致、R2 是否存在 current.json |
-| OAuth 回调失败 | origin 与 GitHub callback 是否精确一致，是否混用 localhost/127.0.0.1，D1 迁移和 Secret 是否已配置 |
-| 登录后 API 500 | SESSION_SECRET 是否一致、是否更换密钥、D1 表是否存在 |
-| 图片或语音 404 | 自定义域名是否绑定正确桶、链接是否包含 prefix、是否误删 media |
-| 网页更新但索引未变 | 检查 current.json、缓存规则、更新器日志；网页部署与资源发布是两条独立流程 |
-| R2 返回 403 | S3 endpoint、Access Key、指定桶读写权限 |
-| 上传出现条件冲突 | 是否有第二个更新器或人工修改发布指针，不要强制覆盖 |
-| Workers CPU 超限 | 查看日志/指标，评估付费 CPU 配额；解包始终留在 Docker |
-
-官方参考：[Workers Node HTTP](https://developers.cloudflare.com/workers/runtime-apis/nodejs/http/)、[Workers SPA](https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/)、[R2 绑定](https://developers.cloudflare.com/r2/api/workers/workers-api-usage/)、[R2 S3 兼容性](https://developers.cloudflare.com/r2/api/s3/api/)、[D1 预编译语句](https://developers.cloudflare.com/d1/worker-api/prepared-statements/)。
-
-## 12. Mac 构建并推送 Docker Hub，Linux 服务器只拉取镜像
-
-Mac 需要已启动的 Docker Engine（Docker Desktop 或 Colima），以及 Buildx。Apple Silicon 为 ARM64，如果 Linux 服务器为 x86_64，必须构建 linux/amd64；也可发布包含 amd64、arm64 的多架构镜像。Docker 会自动选取匹配 Linux 服务器的架构。
-
-Mac 仓库根目录执行，使用自己的 Docker Hub 仓库及唯一版本号：
-
-```sh
-docker login
-sh scripts/publish_updater_image.sh dreamgallery/campus-r2-updater 20261007-toolkit-api linux/amd64
-```
-
-构建过程不需要 R2 密钥。`.dockerignore` 的白名单与 Dockerfile 的显式 COPY 会排除实际环境文件和下载资源。脚本逐架构验证 Python 依赖、解码器和入口后，只推送指定版本标签，不覆盖 latest，不改变当前 Docker context。跨架构仿真编译首次可能较慢。
-
-Linux 服务器需要 Compose 和 R2 配置，另可用 `.env` 覆盖镜像版本，放在同一目录：
-
-- `deploy/nas/docker-compose.yaml` → `docker-compose.yaml`
-- 可选：`deploy/nas/.env.example` → `.env`，覆盖镜像版本或固定 digest；默认使用 `dreamgallery/campus-r2-updater:20261007-toolkit-api`。
-- 已填好的 `deploy/.env.r2.local` → `.env.r2.local`，单独传输，不要放到 Docker Hub。
-
-在 Linux 服务器上执行：
-
-```sh
-chmod 600 .env.r2.local
-docker compose config --quiet
-docker compose pull
-docker compose up -d
+# 在 docker-compose.yaml 所在目录执行
 docker compose logs -f --tail=100 updater
+# 手动检查更新，与自动更新共用锁
+docker compose exec updater python -m campus_story_index.runtime_update --once
 ```
 
-旧版 `docker-compose` 可使用相应命令，但建议安装 Docker Compose v2 插件。私有 Docker Hub 仓库需要在 Linux 服务器上先 `docker login`。此部署不需要监听端口、特权模式或挂载 Docker socket。
-
-升级时先修改 `.env` 中的镜像版本，再执行 `docker compose pull && docker compose up -d`。游戏资源由容器内部每六小时更新，不依赖镜像重建；只有更新器代码变化才需发布新镜像。
-
-Compose 使用 `campus-r2-updater_runtime` 命名卷，与默认的源码构建版本项目/卷名称一致。在同一 Docker 主机迁移时，先停止旧容器再启动新配置，勿删除数据卷、勿同时启动两个更新器。命名卷实际名称可用 `docker volume ls` 核对。
-
-本地构建不等于已验证 Linux 服务器的完整冷启动。首次部署请观察日志，确认下载、解包和 R2 发布完整成功后，再进行网站资源验收。
-
-构建时如果默认 Debian 线路较慢，可设置 `CAMPUS_DEBIAN_MIRROR=https://mirrors.ustc.edu.cn` 再运行发布脚本，软件包签名校验保持启用。该参数只影响镜像构建，不需要放入 Linux 服务器的 R2 环境文件。
-
-Python 包下载也可通过 `CAMPUS_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple` 指定镜像；默认仍使用 PyPI 官方源。当前 Linux 服务器镜像为 `dreamgallery/campus-r2-updater:20261007-toolkit-api`（linux/amd64）。
-
-
-### R2 上传进度
-
-通过 `docker compose logs -f updater` 查看。图片与语音、文本与索引、增量资源包、版本信息分别统计；每个阶段开始、结束以及运行期间每 10 秒输出一次进度。日志包含已处理文件数、比例、已上传数、校验一致而跳过的文件数、失败数、本轮传输 MiB 和耗时。大文件上传或请求重试期间也会持续输出。
-
-百分比按文件数计算（包含跳过和失败），不是字节比例；100% 不代表发布成功，应以最后的 `R2: 发布完成` 为准。传输量来自 SDK 回调，不含跳过的资源。发布前扫描和计算媒体校验值会先显示提示。
-
-升级 Linux 服务器时，将现有 Compose 的镜像或 `.env` 中 `CAMPUS_UPDATER_IMAGE` 改为 `dreamgallery/campus-r2-updater:20261007-toolkit-api`，然后执行 `docker compose pull updater` 和 `docker compose up -d updater`。保留原有挂载路径、内存限制和环境配置。
-
-更新器还会输出每轮检查开始、各处理阶段及下次检查时间（UTC）；成功后默认等待 6 小时，失败后最多等待 15 分钟重试。
-
-
-### 远端媒体批量检查
-
-远端媒体检查使用分页列举专用 `campus-v1/media/` 前缀，每页最多 1000 项。已有媒体按路径中的 SHA-256 和文件大小匹配后跳过；大小冲突会停止发布。依赖该前缀由更新器管理且对象不被外部覆盖，不将 S3 ETag 当作内容哈希。未列出的媒体仍执行 HEAD 校验再上传；文本与索引的增量处理见下一节，资源包保持原有校验。需要 R2 列举对象权限（标准桶对象读写令牌包含）。本地媒体 SHA-256 扫描仍保留，因此首次扫描时间取决于磁盘速度。
-
-
-### 文本增量发布与无变化跳过
-
-更新器默认从 HatsuboshiToolkit 的 `API` 分支读取资源接口配置；masterdb 包固定到 `docker/Dockerfile.updater` 中的提交，构建镜像时安装。升级可直接复用原有 `/runtime` 挂载，已缓存的 Toolkit 检出会切换到新分支。若环境文件显式设置过 `CAMPUS_TOOLKIT_BRANCH=resource`，请删除该覆盖或改为 `API`。
-
-每轮同步文本和工具仓库、从游戏 API 获取完整 masterdb 快照，并检查游戏资源清单；可显式设置 `CAMPUS_MASTER_SOURCE=git` 使用 Git masterdata。根据仓库 HEAD、masterdb 快照版本与 schema、完整资源清单、更新器 Python 代码及 CAMPUS 配置生成摘要；仅在上次成功发布的摘要一致时跳过索引构建、解包和 R2 发布。CSV/ADV 仓库单独更新也会触发处理，不依赖游戏 revision 改变。首次升级没有摘要会正常运行一次。可临时设置 `CAMPUS_FORCE_UPDATE=1` 强制运行，完成后移除。
-
-文本与索引采用 `text/<SHA-256>/<文件名>` 保存，发布目录中的 `file-map.json` 映射逻辑路径。未变化的 CSV/TXT 复用上一成功版本（也支持旧版直接路径），其他文件根据内容批量比对后跳过。索引包含版本链接时仍需上传相应变更；失败不会切换 current.json。不要手动删除仍被映射引用的旧发布目录或 text 对象。
-
-必须先部署本版兼容映射读取的 Workers，再升级镜像 `dreamgallery/campus-r2-updater:20261007-toolkit-api`；Workers 同时支持 cf4 及更早的目录布局。Linux 服务器继续保留现有挂载、限制与密钥配置，修改镜像后 pull/up 即可。
-
-## 资源包解压权限
-
-从 `20260925-cf9` 起，新生成的资源包统一使用目录 `755`、文件 `644` 权限，不继承 Linux 服务器的所有者名称或额外 ACL。已发布的旧资源包不会自动重新生成；旧包解压后若无权限，需要在解压目录中修复权限。
-
+日志显示每个阶段和下次检查时间。R2 上传每十秒报告上传、跳过、失败数量与传输量；百分比按文件数计算，以 `R2: 发布完成` 为成功标志。失败后最多十五分钟重试。
 
 ### 首次初始化选择对话语音编码
 
-新版更新器代码支持在首次启动前，通过 updater 的 `.env.r2.local` 设置：
+首次启动前在 `.env.r2.local` 中设置；完整 Docker 部署使用 `deploy/.env`：
 
 ```dotenv
 CAMPUS_VOICE_FORMAT=aac
 CAMPUS_VOICE_BITRATE=128
 ```
 
-| 格式 | 文件后缀 | 码率设置 |
+| 格式 | 后缀 | 码率 |
 | --- | --- | --- |
-| `flac`（默认） | `.flac` | 留空；8 级无损压缩并校验 |
+| `flac`（默认） | `.flac` | 留空，8 级无损压缩 |
 | `mp3` | `.mp3` | 默认 128 kbps；支持 32/40/48/56/64/80/96/112/128/160/192/224/256/320 |
 | `aac` | `.m4a` | 默认 128 kbps；支持 32–320 的整数值 |
 
-码率可填写 `128` 或 `128k`，指每个文件所有声道合计的目标码率，短片段的实际平均值可能因文件头与编码帧而不同。MP3/AAC 是有损编码；AAC 使用 M4A 容器，支持浏览器播放和拖动。
+码率可填 `128` 或 `128k`。设置保存在 `/runtime/voice-encoding.json`，重启沿用；显式指定不同设置会停止更新。尝试其他格式需使用独立 runtime，不能直接修改现有记录。歌曲始终使用 FLAC。
 
-配置写入挂载目录 `/runtime/voice-encoding.json`。重启时可省略这两个变量，继续使用已保存的设置；显式设置与已保存值不一致时，会输出错误并停止本轮更新，不会重编码旧资源。已有 FLAC 安装会自动沿用 FLAC。需要尝试不同编码或码率时，请使用新的独立 runtime 挂载目录；不要删除正在使用的数据卷或手动修改此记录。
+### 音乐资源
 
-仅影响对话语音，播放器歌曲继续使用 FLAC。索引、缓存与 R2 发布自动使用对应后缀；已校验的同格式、同码率缓存直接复用。格式不变的重启不会重新转码。
+默认收录全部演唱版本，排除伴奏和 BGM，包含游戏封面和时间轴歌词；无匹配时间轴时显示暂无同步歌词。
 
-本功能由 `20261003-voice-codecs` 镜像提供，保留游戏 API masterdb 获取流程，并新增 FFmpeg。`20261003-masterdb` 及更早镜像不包含此编码选项。继续使用原 FLAC 时只需更新镜像并重建容器，保留原 runtime 和账号挂载，无需新增编码配置。使用源码部署可运行 `docker compose -f deploy/compose.r2.yaml build updater` 后再启动。全 Docker 部署则在 `deploy/.env` 设置相同变量。
+- `CAMPUS_MUSIC_SCOPE=vocal`：默认范围；`all` 包含伴奏和 BGM。
+- `CAMPUS_MUSIC_IDS`：可选，空格分隔的 Music ID；留空则自动跟随游戏更新。
 
-## 音乐资源更新
+音乐使用独立的 `music/current.json` 指针，全部文件上传成功后才切换歌单。缓存位于 `/runtime/cache/music-source`，可播放资源位于 `/runtime/cache/music`。
 
-`20261003-cf13` 起，更新器同时处理演唱歌曲的 FLAC、封面和同步歌词。默认范围为全部演唱版本，不含伴奏与 BGM。首次需额外下载完整 AWB 和歌词时间轴；后续按源文件校验值复用下载与转码结果，更新日志中显示逐首处理进度与 R2 上传进度。
+## 资源版本下载
 
-- `CAMPUS_MUSIC_SCOPE=vocal`：默认演唱歌曲；`all` 包括伴奏和 BGM。
-- `CAMPUS_MUSIC_IDS`：可选，空格分隔的 Music ID；不设置则自动跟随 masterdata 和资源清单。
-- 缓存目录：`/runtime/cache/music-source`；可播放资源：`/runtime/cache/music`。
-- 音乐和剧情使用各自的原子发布指针。音乐文件全部上传并校验完成后，才更新 R2 `<prefix>/music/current.json`；中断时旧歌单仍可访问，重试复用已上传文件。
-- 先部署包含 `/music/*` 路由的 Workers，再更新 Linux 服务器镜像。无需新增密钥、R2 桶或 D1 表，保留原有挂载和内存限制。
+页头显示游戏资源清单的 `revision`，提供最近五份已成功生成的增量资源包。首次仅建立打包基线；后续比较完整游戏资源清单，下载新增或变化的资源，不限于网页所需素材。跨版本更新包包含上次成功基线以来的累计差异。
 
-文件名含内容哈希，旧版本文件不自动删除。镜像不包含下载资源；音乐资源在运行后初始化。歌词没有匹配的演出时间轴时显示缺失提示，不生成猜测歌词。
+包保留原始 AssetBundle、脚本与 ACB/AWB 等文件，并导出原比例 PNG 和拉伸图片。角色卡全图及剧情 still 为 1440×2560，辅助卡全图为 2560×1440，漫画为 1024×768；不包含网站 CSV、索引和拆分语音。
 
-### 精简音频编码器构建
+`.tar.gz` 按内容包含 `assetbundle/`、`resource/`、`image/Texture2D/`、`stretch/` 和变更清单 `package.json`。目录权限为 `755`、文件为 `644`。全部处理成功才推进基线；第六份发布成功后删除最旧下载包。
 
-更新器使用 `scripts/build_ffmpeg_audio.sh` 从固定版本、带 SHA-256 校验的 FFmpeg 源码构建，仅保留 WAV/PCM、FLAC、MP3 和 AAC/M4A 的读取、编码与校验功能。运行镜像不安装 Debian 完整 `ffmpeg` 软件包及其视频、桌面相关依赖。游戏音频解包仍使用 vgmstream，对话编码选项与歌曲 FLAC 格式保持不变。
+## 发布与数据保留
 
-本地构建与验证（不会推送 Docker Hub）：
+R2 对象使用以下布局，前缀可自行配置：
 
-```bash
-docker buildx build --platform linux/amd64 --load \
-  -t campus-r2-updater:audio-slim -f docker/Dockerfile.updater .
-sh scripts/check_updater_image.sh campus-r2-updater:audio-slim linux/amd64
+```text
+campus-v1/
+  current.json                         # 当前剧情资源版本
+  media/<sha256>/<filename>             # 图片、语音、歌曲
+  text/<sha256>/<filename>              # CSV、TXT、索引和歌词
+  releases/<release>/file-map.json      # 逻辑路径与内容对象的映射
+  releases/<release>/resource-snapshot.json
+  releases/<release>/resource-versions.json
+  music/current.json                   # 当前歌单
+  downloads/campus-resources-r....tar.gz
 ```
+
+媒体与文本按文件内容去重。剧情资源上传完整后，通过条件写入切换 `current.json`，然后切换本地 `current`。上传中断不会切换对应发布指针，重试可复用已上传对象；同一前缀只运行一个更新器。
+
+`/runtime` 保存仓库、缓存、发布版本和增量基线，需定期备份；升级保留现有挂载，不执行 `down -v`。若远端已有发布而本地卷丢失，应恢复备份，不能直接删除远端指针重新初始化。
+
+本地历史发布通过硬链接共享图片与语音，缓存被新文件替换后，历史版本仍占用旧文件的空间。停止更新器后可清理不需要的本地旧版本，保留 `current` 指向的目录。R2 媒体、文本和发布映射不自动清理，删除前需核对全部引用，不能按本地目录的规则直接删除。
+
+资源域名可缓存不可变的 `media/` 和 `text/` 对象；`current.json` 与下载包遵循源站缓存头。不要对整个前缀设置永久缓存或自动删除规则。网页部署与游戏资源发布分别进行，更新网页不会自动更新 R2 数据。
+
+## 常见问题
+
+| 现象 | 检查项 |
+| --- | --- |
+| 一直等待初始化 | Docker 日志、桶名和前缀是否一致、是否存在 `current.json` |
+| OAuth 回调失败 | 网站地址与回调是否一致、D1 迁移和 Secret 是否配置 |
+| 登录后 API 报错 | D1 表、`SESSION_SECRET`，以及 Worker 日志 |
+| 图片或语音 404 | 资源域名绑定、前缀、是否误删资源 |
+| R2 返回 403 | endpoint、密钥和桶读写权限 |
+| 发布条件冲突 | 是否有多个更新器，或手动改过发布指针 |
+| 网页显示旧资源 | Docker 是否完成发布、指针和缓存规则；远端状态只显示最后成功发布 |

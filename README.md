@@ -1,34 +1,28 @@
 # Campus Viewer · 初星学园剧情档案
 
-学园偶像大师剧情目录与翻译协作网站。角色、主线、辅助卡、活动及其他剧情使用统一索引，支持筛选、文本更新记录、逐句语音、翻译编辑、GitHub 协作任务和 CSV/TXT 批量导出。
+学园偶像大师剧情目录与翻译协作网站，支持角色、主线、辅助卡、活动及其他剧情的分类、筛选和文本更新记录。
 
-## Docker 部署
+## 主要功能
 
-要求 Docker Engine / Desktop 和 Compose v2：
+- 剧情阅读与逐句语音，角色资料、卡面预览和浅色 / 深色主题。
+- GitHub 登录、翻译 / 校对任务认领、远端草稿、提交与完成统计；协作任务仅对工作仓库有写权限的用户开放。
+- CSV 导入、编辑与批量导出，译文回填原始 TXT 脚本；回车自动转换换行标记，每行超过 21 字提醒。
+- 可展开的音乐播放器，支持封面、同步歌词、搜索、随机播放和单曲循环。
+- Docker 自动更新 masterdb、剧情文本及游戏资源，提供最近五份增量资源包下载。
 
-```sh
-git clone https://github.com/DreamGallery/campus-viewer.git
-cd campus-viewer/deploy
-cp .env.example .env
-# 编辑 .env，填写访问地址与 GitHub OAuth Client ID、Client Secret
-chmod 600 .env
-docker compose up -d --build
-docker compose logs -f updater
-```
+## 部署
 
-默认网页端口为 8080。OAuth 回调填写 `<CAMPUS_PUBLIC_ORIGIN>/api/auth/callback`；公网部署使用 HTTPS 反向代理。
+| 方式 | 说明 |
+| --- | --- |
+| [Cloudflare Workers + R2](docs/cloudflare-deployment.md) | Workers 托管网页与协作接口，D1 保存登录会话，R2 保存资源，Docker 负责更新。 |
+| [完整 Docker 部署](deploy/README.md) | 网页、协作接口和更新器均运行在 Docker 中，资源保存在持久化卷。 |
+| [Docker 更新器](deploy/docker/README.md) | 拉取 Docker Hub 镜像，为 Cloudflare 部署下载、解包并上传资源。 |
 
-镜像只包含代码、依赖和固定界面素材。首次启动后自动下载网站所需文本、图片和语音；初始化完成前显示进度。默认每 6 小时更新一次，失败重试，完整校验成功后才切换资源版本。数据在持久化卷中，普通升级不要执行 `down -v`。
-
-首次启动可通过 `CAMPUS_VOICE_FORMAT=flac/mp3/aac` 选择对话语音格式，MP3/AAC 支持 `CAMPUS_VOICE_BITRATE`（默认 128 kbps）；配置随 runtime 卷保存。歌曲保持 FLAC。详见[语音编码配置](docs/cloudflare-deployment.md#首次初始化选择对话语音编码)。
-
-页头显示游戏清单 revision，提供最近五个增量游戏资源包。首次仅建立下载包基线，后续按 HatsuboshiToolkit API 流程解密、分类、导出 PNG 并生成拉伸图片。网站资源初始化与全游戏增量打包是两个不同范围。
-
-详细设置、更新、备份与验证限制见 [部署说明](deploy/README.md)。
+镜像只包含代码、依赖与固定界面素材，游戏资源在部署后初始化。对话语音支持 FLAC、MP3、AAC，歌曲使用 FLAC；资源包首次只建立基线，之后收录新增或变化的游戏资源。
 
 ## 本地开发
 
-使用 Node.js 22.12+、Python 3.12+。索引器及数据流水线见 [索引器使用说明](docs/indexer.md) 和 [语音索引说明](docs/voice-index.md)。
+需要 Node.js 22.12+、Python 3.12+，并准备本地资源目录。索引和资源获取见[索引器说明](docs/indexer.md)与[语音索引说明](docs/voice-index.md)。
 
 ```sh
 npm ci
@@ -40,58 +34,10 @@ npm run dev:api
 npm run dev -- --host 127.0.0.1
 ```
 
-OAuth 回调为 `http://127.0.0.1:5173/api/auth/callback`，地址不要混用 localhost 和 127.0.0.1。Vite 的本地资源路径可在 `.env.local` 中设置 `CAMPUS_WEB_DATA`、`CAMPUS_AUDIO_CLIPS`。不要将 Secret 放入 `VITE_` 环境变量。
-
-任务列表要求登录且拥有工作仓库写权限；匿名用户仍可浏览剧情、本地编辑及导出。会话保存在 API 内存，重启后需要重新登录，当前采用单 API 实例。
-
-编辑器回车自动序列化为 CSV 的字面 `\n`，每行超过 21 字会提示。TXT 回填按原文和说话人逐条匹配，保留脚本控制指令；批量导出读取远端正式稿，不包含浏览器未提交草稿。校对提交保留上游姓名词典处理，普通 TXT 下载保留原姓名。
-
-正式稿按文件 SHA 和工序 revision 检查冲突，用单次 Git commit 提交多个文件。Issue 更新不支持跨接口事务；正式稿提交后状态同步失败会另行提示。
-
-## 音乐播放器
-
-底部播放器可展开查看封面、同步歌词和歌单，支持搜索、切歌、随机播放、单曲循环和点击歌词跳转；播放剧情语音或角色介绍时会自动暂停音乐。
-
-Docker 更新器从 `Music.yaml` 选取有完整 AWB 的演唱版本，默认排除伴奏和 BGM。下载并校验 ACB/AWB 后，从完整 AWB 解码为 FLAC 8 级，保留采样率并验证 PCM；封面取自游戏资源，逐句歌词从 Live 时间轴读取。没有对应时间轴的歌曲显示“暂无同步歌词”。已完成的下载和转码会复用，原文件变化或校验失败时重新处理。
-
-本地使用安装了项目资源依赖、vgmstream-cli 和 flac 的环境运行：
-
-```sh
-python -m campus_story_index.music_preview --masterdata /path/to/gakumasu-diff --manifest /path/to/OctoManifest.json --decoder /path/to/vgmstream-cli
-npm run dev -- --host 127.0.0.1 --port 5174
-```
-
-输出在 `data/music`，缓存位于 `data/music-source`，均不提交仓库或打进镜像。`--ids music-char-hski-001` 可限制本地试听范围。Docker 对应设置为 `CAMPUS_MUSIC_IDS`（空格分隔）；`CAMPUS_MUSIC_SCOPE=vocal` 为默认范围，`all` 另含伴奏和 BGM。
-
-R2 的音乐使用独立的 `music/current.json` 索引指针，只有引用的 FLAC、封面和歌词全部上传成功后才切换。网页通过 `/music/library.json` 读取歌单，文件使用内容哈希地址复用。音乐尚未初始化时隐藏播放器。
-
-若本地剧情资源尚未准备，可设置 `CAMPUS_PREVIEW_REMOTE=https://your-site.example` 启动 Vite，读取该站点的公开剧情目录和资源版本信息；音乐仍从本地加载，协作 API 仍使用本地配置。
-
-## 检查与打包
-
-```sh
-npm run lint
-npm run build
-npm run test:api
-npm run test:workbench
-python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m unittest discover -s tests
-python3 scripts/package_deploy.py
-```
-
-最后一个命令生成 `release/campus-story-deploy.tar.gz`，不包含环境配置、缓存和游戏资源。数据契约见 [剧情索引](docs/index-v2.md) 与 [语音索引](docs/voice-index.md)。
+OAuth 回调为 `http://127.0.0.1:5173/api/auth/callback`。Secret 只放服务端配置，不使用 `VITE_` 前缀。页脚显示 Git 提交号和构建时间；构建时可用 `CAMPUS_BUILD_REVISION` 指定版本号。
 
 ## 素材与来源
 
-固定界面素材来源见 [官网素材说明](public/images/official/SOURCES.md) 和 [筛选图标说明](public/images/filters/SOURCES.md)。其余游戏资源在部署后获取。
+固定素材见[官网素材说明](public/images/official/SOURCES.md)和[筛选图标说明](public/images/filters/SOURCES.md)。字体使用 IBM Plex Sans、Plex Sans SC、Plex Sans JP，许可证在 `public/fonts/`。
 
-字体使用 IBM Plex Sans、Plex Sans SC、Plex Sans JP，由 npm 包提供并本地打包。许可证在 `public/fonts/`；更换字体版本后运行 `python3 scripts/build-font-css.py` 更新 CSS。
-
-翻译工序逻辑基于 [gakumas-viewer](https://github.com/chihya72/gakumas-viewer)，保留 [上游 MIT 许可证](src/workbench/upstream/LICENSE)。默认工作仓库为 [gakumas-translation-work](https://github.com/chihya72/gakumas-translation-work)。游戏资源及素材权利归各权利人所有，本项目为非官方网站。
-
-## Cloudflare 混合部署
-
-Workers + D1 托管网页和协作接口，R2 保存资源，Docker 更新器负责解包上传。详细配置、旧桶隔离、初始化、回滚边界与测试步骤见 [Cloudflare 部署文档](docs/cloudflare-deployment.md)。
-
-页脚显示 GitHub 项目链接与网页构建版本（Git 短提交号，本地改动会标为 `local`；悬停版本可查看 UTC 构建时间）。从源码归档或 Docker 构建时，可用 `CAMPUS_BUILD_REVISION` 环境变量或同名 Docker 构建参数传入提交号。
+翻译工序基于 [gakumas-viewer](https://github.com/chihya72/gakumas-viewer)，保留[上游 MIT 许可证](src/workbench/upstream/LICENSE)。默认工作仓库为 [gakumas-translation-work](https://github.com/chihya72/gakumas-translation-work)。游戏资源及素材权利归各权利人所有。

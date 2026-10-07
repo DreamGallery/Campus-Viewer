@@ -39,7 +39,7 @@ class ArchiveTests(unittest.TestCase):
                 with tarfile.open(root/'downloads'/index['versions'][0]['filename']) as archive:
                     self.assertEqual(archive.getnames(),['game.txt'])
 
-    def test_archive_normalizes_nas_metadata_and_extracts_readable_files(self):
+    def test_archive_normalizes_docker_metadata_and_extracts_readable_files(self):
         from campus_story_index.resource_archive import portable_archive_member
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); self.setup_files(root)
@@ -47,17 +47,17 @@ class ArchiveTests(unittest.TestCase):
             (dest / 'image/nested').mkdir(parents=True)
             (dest / 'image/nested/test.txt').write_text('game data')
             original = tarfile.TarFile.gettarinfo
-            def nas_metadata(archive, *args, **kwargs):
+            def docker_metadata(archive, *args, **kwargs):
                 member = original(archive, *args, **kwargs)
-                # Simulate a NAS returning 000 while still allowing the updater to read.
+                # Simulate a Docker mount reporting 000 while the updater can read it.
                 member.mode = 0
                 member.uid = 1234; member.gid = 5678
-                member.uname = 'nas-user'; member.gname = 'nas-group'
+                member.uname = 'docker-user'; member.gname = 'docker-group'
                 member.pax_headers = {'SCHILY.mode': '0', 'SCHILY.acl.access': 'restricted'}
                 return member
             publish(root, root / 'cache', root / 'repos', manifest(62))
             with patch('campus_story_index.resource_archive.build_package', return_value=dest), \
-                    patch.object(tarfile.TarFile, 'gettarinfo', nas_metadata):
+                    patch.object(tarfile.TarFile, 'gettarinfo', docker_metadata):
                 publish(root, root / 'cache', root / 'repos', manifest(63))
             index = json.loads((root / 'current/resource-versions.json').read_text())
             with tarfile.open(root / 'downloads' / index['versions'][0]['filename']) as archive:

@@ -1,86 +1,52 @@
-# Docker 部署
+# 完整 Docker 部署
 
-## 第一次启动
+网页、协作接口与资源更新器一起运行，资源保存在 Docker 持久化卷中。如使用 Cloudflare 托管网页，请参阅[混合部署说明](../docs/cloudflare-deployment.md)。
 
-安装 Docker Engine / Docker Desktop 及 Docker Compose v2。解压部署包后进入 `campus-story/deploy`：
+## 配置与启动
+
+需要 Docker 和 Compose v2。在仓库的 `deploy/` 目录执行：
 
 ```sh
 cp .env.example .env
-# 编辑 .env，填入公网访问地址、GitHub Client ID 和 Secret
 chmod 600 .env
-docker compose up -d --build
-docker compose logs -f updater
 ```
 
-OAuth 应用 Homepage 填 `CAMPUS_PUBLIC_ORIGIN`，回调填 `<CAMPUS_PUBLIC_ORIGIN>/api/auth/callback`。使用实际访问的同一个域名，不要混用 localhost、127.0.0.1 或局域网 IP。公网建议在前方配置 HTTPS 反向代理；示例仅开放网页端口，API 没有宿主机端口。
+在 `.env` 中填写：
 
-网页、API 与 Python 更新器均在仓库根目录，Compose 使用同一个构建上下文。通过 Git 克隆时也直接进入 `deploy/` 执行上述命令。
+- `CAMPUS_PUBLIC_ORIGIN`：网站访问地址，默认端口为 `8080`。
+- `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`：GitHub OAuth 应用配置。
+- `HATSUBOSHI_CREDENTIALS_DIR`：游戏账号目录的绝对路径，目录内放置 `account.json`，格式为 `{"refresh_token":"..."}`。目录权限设为 `700`、文件为 `600`，保持可写以保存轮换令牌。
 
-镜像包含代码、依赖与约 600 KB 的固定界面素材（校徽/背景/图标），并编译解码器；不抓取 masterdata、剧情 CSV/TXT、卡面或语音。容器启动后 updater 自动初始化：同步四个上游仓库 → 生成剧情索引 → 下载并校验音频包 → 解码 → 生成语音索引 → 下载图片 → 导出并检查网页目录 → 发布。首次完成之前网页显示初始化阶段，完成后自动加载。
-
-首次语音资源可能占用数十 GB 和较长时间。下载并发默认 4、解码并发默认 2，可在 `.env` 调整。实际空间随游戏更新增加；部署前预留足够磁盘。
-
-## 更新与重试
-
-默认每 6 小时同步一次，失败 15 分钟后重试；间隔以完成本轮后计时。`CAMPUS_UPDATE_INTERVAL` 单位为秒，最低 300 秒。
+OAuth 回调填写 `<CAMPUS_PUBLIC_ORIGIN>/api/auth/callback`。公网访问需配置 HTTPS 反向代理。
 
 ```sh
-# 查看状态与阶段
-curl http://127.0.0.1:8080/api/resources/status
-# 手动提前执行；与自动更新共用锁，不会并发破坏资源
+docker compose config --quiet
+docker compose up -d --build
+docker compose logs -f --tail=100 updater
+```
+
+镜像不包含下载的游戏资源。首次启动自动获取 masterdb、剧情文本、图片、语音和音乐，完成前网页显示初始化进度。运行需要访问 GitHub 和游戏资源服务，并预留足够的磁盘空间。
+
+## 更新与配置
+
+默认每轮完成后等待六小时检查更新，失败后最多十五分钟重试。自动更新针对数据与资源；修改网站代码后需重新构建容器。
+
+```sh
+# 手动检查资源更新，与自动更新共用锁
 docker compose exec updater python -m campus_story_index.runtime_update --once
-# 更新网站代码或依赖后重建；资源卷不会因此清空
+# 更新代码后重新构建
 docker compose up -d --build
 ```
 
-只有完整下载、构建和校验通过后才切换 `current`。失败保留上一版，首次失败则停留初始化页。相同内容复用校验通过的下载和解包缓存。上游移除的资源不自动清理，防止历史剧情失效。
+`CAMPUS_UPDATE_INTERVAL` 控制间隔秒数；`CAMPUS_DOWNLOAD_WORKERS`、`CAMPUS_EXTRACT_WORKERS` 控制下载和解包并发。首次启动可设置[对话语音编码](../docs/cloudflare-deployment.md#首次初始化选择对话语音编码)，歌曲保持 FLAC。
 
-## 数据与备份
+默认 `CAMPUS_MASTER_SOURCE=api`，从游戏 API 获取完整 masterdb。设置为 `git` 可使用 Git 数据源，此时可移除 `/credentials` 挂载；API 失败不会自动回退。
 
-命名卷 `campus-story_runtime` 保存 `repos/`、`cache/`、`releases/`、`current`、`status.json`。API 和 Nginx 只读挂载，只有 updater 写入。不要手工修改 updater 管理的 Git checkout；发现本地修改会拒绝更新。
+## 数据保留
 
-发布版本的图片/音频与缓存使用硬链接节省空间，生产者采用原子替换避免修改旧版本；CSV/TXT 单独复制。旧发布版本暂不自动删除，便于回滚；请监控空间并在停止 updater 后清理确认不需要的旧版本。不要对发布版本文件原地写入。
+- `campus-story_runtime` 卷保存仓库、缓存、发布版本和资源包基线。备份该卷、`.env` 和账号目录；普通升级保留卷，不执行 `down -v`。
+- 只有完整处理成功才切换 `current`，失败保留上次发布。历史发布不自动清理；停止更新器后，可删除确认不再需要的本地旧版本，保留 `current` 指向的目录。
+- 图片与语音通过硬链接共享。重新解包替换缓存后，历史发布仍保留旧文件，直到相关链接全部删除才释放空间。
+- 正式译文和任务保存在 GitHub，未提交的本地草稿保存在浏览器。此部署的登录会话在 API 内存中，重启后需重新登录。
 
-备份整个资源卷和 `.env`。`docker compose down` 保留卷；`down -v` 会删除资源，不用于普通升级。翻译正式稿仍存放 GitHub，浏览器未提交草稿仅在各自浏览器内。
-
-OAuth 会话仍在 API 内存里；重启 API 后重新登录即可。当前部署为单 API 实例，不适合直接扩容多副本；需要多副本时应先迁移共享会话存储。自动更新只更新文本/游戏资源，不会自动拉取并执行上游网站代码。
-
-## 验证范围
-
-本机无 Docker 引擎，未实际执行镜像构建或完整容器冷启动。前端生产构建、类型检查、lint、API/编辑器/更新器单元测试及本地浏览器验证已执行。首次 Linux 镜像构建需要能访问 npm、PyPI、Debian 和 GitHub；运行初始化还需要能访问游戏资源服务器。
-
-
-## 资源版本下载
-
-页头“学园剧情档案”下显示游戏资源清单的 `revision`（不是 Git 提交或网页 build_id），点击展开最近五个已成功生成的增量更新包。
-
-首次部署仅为下载包建立资源清单基线，不抓取约 82 GB 的全游戏历史资源。网站自身需要的图片、剧情文本和语音仍正常初始化。后续 revision 改变时，将当前完整清单与上一成功基线按资源名称、大小、MD5 比较，下载所有类型中新增或变化的游戏文件，不局限于网页使用的素材。
-
-处理参考 HatsuboshiToolkit 的 API 分支：校验下载 → AssetBundle 头部解密 → 按前缀分类 → 导出 Texture2D 原比例 PNG → 生成拉伸 PNG。角色卡全图及剧情 still 为 1440×2560、辅助卡全图为 2560×1440、漫画为 1024×768。原文件和原比例图片保留，另放 `stretch/`；无额外 WebP 压缩。资源文件（剧情脚本、ACB/AWB 等）按原文件保留，不放网站的 CSV、索引或拆分语音。
-
-包为 `.tar.gz`，包含 `assetbundle/`、`resource/`、`image/Texture2D/`、`stretch/` 中有变化的内容，以及 `package.json`（更新文件与移除清单）。没有变化的目录可能不存在。包只包含变化部分，不是可独立还原整个游戏的全量备份；跨越多个 revision 时提供上次成功基线到本次 revision 的累计差异，不伪造未观测版本。
-
-所有处理与打包成功后才推进基线并发布链接；失败仍从原基线重试。相同 revision 不重复打包。第六个包成功发布后删除最旧下载包；发布快照的保留策略不变。已完成打包的临时处理缓存会清理，失败缓存用于重试。下载支持 HTTP Range。升级前备份原有资源卷；旧部署没有基线时升级首轮仅建立基线。
-
-
-## 游戏 masterdb 数据源
-
-更新器默认 `CAMPUS_MASTER_SOURCE=api`，镜像内包含固定提交的 HatsuboshiToolkit
-masterdb 模块。每轮先登录游戏并拉取 masterdb，所有表通过 SQLCipher、protobuf
-完整性检查后，使用同一份不可变快照生成剧情、音乐和网页索引。失败保留既有发布。
-更新判断同时比较游戏 master 版本、schema 和表内容哈希。
-
-在 Compose 同目录的 `.env` 或 shell 环境中设置
-`HATSUBOSHI_CREDENTIALS_DIR=/absolute/private/game-account`；该目录内存放
-`account.json`，内容为 `{"refresh_token":"专用游戏测试账号令牌"}`。目录权限 700，
-文件权限 600。目录需要可写，以保存轮换后的令牌。不要把账号文件放进构建上下文、
-Git 或镜像。可用 `HATSUBOSHI_APP_VERSION` 覆盖自动检测的客户端版本。
-
-显式设置 `CAMPUS_MASTER_SOURCE=git` 可继续使用原 Git 数据源；API 模式失败不会
-自动退回旧数据。Git 模式下可以移除 Compose 的 `/credentials` 挂载。
-
-手动只更新 masterdb：
-
-```sh
-docker compose exec updater python -m hatsuboshi_master --output /runtime/cache/masterdb
-```
+页头提供[最近五份增量资源包](../docs/cloudflare-deployment.md#资源版本下载)。首次只建立下载包基线，网站自身资源仍会初始化。

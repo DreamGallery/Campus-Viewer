@@ -14,7 +14,7 @@ from .game_package import build_package, snapshot
 
 
 def portable_archive_member(member):
-    """Do not export container/NAS permissions, owners or extended metadata."""
+    """Do not export Docker permissions, owners or extended metadata."""
     member.mode = 0o755 if member.isdir() else 0o644
     member.uid = member.gid = 0
     member.uname = member.gname = ''
