@@ -21,7 +21,7 @@ SOURCES = {
     'master': ('https://github.com/vertesan/gakumasu-diff.git', 'main'),
     'story': ('https://github.com/DreamGallery/Campus-Story.git', 'main'),
     'adv': ('https://github.com/DreamGallery/Campus-adv-txts.git', 'main'),
-    'toolkit': ('https://github.com/DreamGallery/HatsuboshiToolkit.git', 'resource'),
+    'toolkit': ('https://github.com/DreamGallery/HatsuboshiToolkit.git', 'API'),
 }
 
 
@@ -43,7 +43,8 @@ def sync_repo(root, key, url, branch):
         dirty = subprocess.check_output(['git', '-C', str(target), 'status', '--porcelain'])
         if dirty.strip():
             raise RuntimeError(f'{key}: checkout has local changes; refusing update')
-        command(['git', '-C', target, 'fetch', 'origin', f'{branch}:refs/remotes/origin/{branch}'])
+        # Upstream data/tool branches may be rewritten; only update our clean managed checkout.
+        command(['git', '-C', target, 'fetch', 'origin', f'+refs/heads/{branch}:refs/remotes/origin/{branch}'])
         command(['git', '-C', target, 'checkout', '--detach', f'refs/remotes/origin/{branch}'])
     return target
 

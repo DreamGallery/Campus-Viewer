@@ -1,6 +1,6 @@
 # Linux 服务器（如 Debian / Ubuntu）：从 Docker Hub 运行资源更新器
 
-镜像：`dreamgallery/campus-r2-updater:20261006-audio-slim`，架构 `linux/amd64`。
+镜像：`dreamgallery/campus-r2-updater:20261007-toolkit-api`，架构 `linux/amd64`。
 
 1. 将 `docker-compose.yaml` 放入 Linux 服务器的专用目录。
 2. 将已经填写的 `.env.r2.local` 单独复制到同一目录，执行 `chmod 600 .env.r2.local`。不要将它上传 Docker Hub 或 GitHub。
@@ -23,3 +23,5 @@ Compose 已包含默认镜像版本；`.env` 用于指定游戏账号目录。�
 更新器日志出现“更新完成”后，打开已配置的网站检查章节、图片和语音。日志每 10 秒显示上传进度，并在每轮结束时显示下次检查时间。完整的 Workers、R2 与 OAuth 配置见 [混合部署文档](../../docs/cloudflare-deployment.md)。
 
 新版默认从游戏 API 获取 masterdb，不再依赖 gakumasu-diff 的更新速度。所有表完整解析后才用于索引；失败保留上次已发布资源。版本与 schema 哈希参与增量判断。
+
+Toolkit 资源配置默认使用 `API` 分支，masterdb 包在镜像构建时固定安装。升级时保留原有 runtime 和账号目录。

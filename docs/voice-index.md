@@ -20,7 +20,7 @@ sh scripts/build_vgmstream.sh
   --adv /path/to/Campus-adv-txts/Resource \
   --catalog generated/story-index.json \
   --config-repo /path/to/HatsuboshiToolkit \
-  --config-ref resource \
+  --config-ref API \
   --refresh-manifest --workers 8
 
 .venv/bin/python -m campus_story_index.audio_extract \

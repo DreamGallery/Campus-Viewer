@@ -15,7 +15,7 @@ FROM python:3.12-slim-bookworm AS masterdb-wheels
 ARG DEBIAN_MIRROR=https://deb.debian.org
 RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 update && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 install -y --no-install-recommends git build-essential libsqlcipher-dev && rm -rf /var/lib/apt/lists/*
 ARG PIP_INDEX_URL=https://pypi.org/simple
-ARG HATSUBOSHI_TOOLKIT_REF=b81c00058040346f6cf08cf93c009983641d1dff
+ARG HATSUBOSHI_TOOLKIT_REF=6220c5d02297a9a85d6806a9a4d770554a78829f
 COPY requirements.txt requirements-audio.txt requirements-assets.txt requirements-r2.txt /constraints/
 RUN pip wheel --index-url "$PIP_INDEX_URL" --wheel-dir /wheels -r /constraints/requirements-r2.txt "hatsuboshi-masterdb @ git+https://github.com/DreamGallery/HatsuboshiToolkit.git@${HATSUBOSHI_TOOLKIT_REF}"
 

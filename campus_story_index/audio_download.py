@@ -17,7 +17,7 @@ import requests
 from .io import atomic_write, digest
 
 
-def fetch_manifest(config_path=None, config_repo=None, config_ref='resource'):
+def fetch_manifest(config_path=None, config_repo=None, config_ref='API'):
     from Crypto.Cipher import AES
     from Crypto.Util.Padding import unpad
     from google.protobuf.json_format import MessageToDict
@@ -174,7 +174,7 @@ def main():
     parser.add_argument('--manifest', default='data/audio/OctoManifest.json')
     parser.add_argument('--config', type=Path)
     parser.add_argument('--config-repo', type=Path)
-    parser.add_argument('--config-ref', default='resource')
+    parser.add_argument('--config-ref', default='API')
     parser.add_argument('--refresh-manifest', action='store_true')
     parser.add_argument('--adv', required=True, type=Path)
     parser.add_argument('--catalog', default='generated/story-index.json', type=Path)
