@@ -108,6 +108,37 @@ def list_media(s3, bucket, prefix, namespace="media"):
     return result
 
 
+def catalog_media(stage, files):
+    """Resolve only local media referenced by the published catalog."""
+    urls = set()
+    folders = {'/audio/': 'audio', '/assets/images/': 'web/assets/images'}
+
+    def collect(value):
+        if isinstance(value, dict):
+            for item in value.values(): collect(item)
+        elif isinstance(value, list):
+            for item in value: collect(item)
+        elif isinstance(value, str) and value.startswith(tuple(folders)):
+            urls.add(value)
+
+    for source in files:
+        collect(json.loads(source.read_text()))
+    result = {}
+    for url in sorted(urls):
+        start = next(start for start in folders if url.startswith(start))
+        relative = url[len(start):]
+        if '\\' in relative or any(part in ('', '.', '..') for part in relative.split('/')):
+            raise ValueError('Invalid catalog media path')
+        base = stage / folders[start]
+        path = base / relative
+        if path.is_symlink() or not path.resolve().is_relative_to(base.resolve()):
+            raise ValueError('Invalid catalog media path')
+        if not path.is_file():
+            raise FileNotFoundError('Missing catalog media: ' + url)
+        result[url] = path
+    return result
+
+
 def publish_release(root, release, s3=None):
     bucket, prefix = settings()
     s3 = s3 or client()
@@ -120,6 +151,12 @@ def publish_release(root, release, s3=None):
     if previous and local_current.exists() and previous['release'] not in (local_current.resolve().name, release):
         raise RuntimeError('Remote and local releases differ; another updater or rollback requires reconciliation')
     versions = json.loads((stage / 'resource-versions.json').read_text())
+    catalog = stage / 'web/catalog'
+    manifest = json.loads((catalog / 'manifest.json').read_text())
+    build = stage / 'web' / manifest['base_path'].lstrip('/')
+    if not build.resolve().is_relative_to(catalog.resolve()): raise ValueError('Invalid catalog base_path')
+    files = [catalog / 'manifest.json'] + sorted(build.rglob('*.json'))
+    local_media = catalog_media(stage, files)
     remote_media = list_media(s3, bucket, prefix)
     remote_media.update(list_media(s3, bucket, prefix, 'text'))
     def upload(path, key, progress):
@@ -160,16 +197,12 @@ def publish_release(root, release, s3=None):
     public_base = os.getenv('CAMPUS_R2_PUBLIC_BASE_URL', '').rstrip('/')
     if public_base and not public_base.startswith('https://'): raise ValueError('Public resource base must use HTTPS')
     media = {}
-    jobs = []
-    for folder, url in [('audio', '/audio/'), ('web/assets/images', '/assets/images/')]:
-        base = stage / folder
-        if not base.exists(): continue
-        for path in sorted(base.rglob('*')):
-            if not path.is_file() or path.is_symlink(): continue
-            key = 'media/' + digest(path) + '/' + path.name
-            media[url + path.relative_to(base).as_posix()] = (public_base + '/' + prefix if public_base else '') + '/' + key
-            jobs.append((path, key))
-    batch('图片与语音', jobs)
+    jobs = {}
+    for url, path in local_media.items():
+        key = 'media/' + digest(path) + '/' + path.name
+        media[url] = (public_base + '/' + prefix if public_base else '') + '/' + key
+        jobs.setdefault(key, path)
+    batch('图片与语音', [(path, key) for key, path in jobs.items()])
     def rewrite(value):
         if isinstance(value, list): return [rewrite(v) for v in value]
         if isinstance(value, dict): return {k: rewrite(v) for k, v in value.items()}
@@ -180,11 +213,6 @@ def publish_release(root, release, s3=None):
     # Rewriting is isolated from the local Docker release and its hard-linked cache.
     temp = root / 'cache/r2-export' / release
     temp.mkdir(parents=True, exist_ok=True)
-    manifest = json.loads((stage / 'web/catalog/manifest.json').read_text())
-    catalog = stage / 'web/catalog'
-    build = stage / 'web' / manifest['base_path'].lstrip('/')
-    if not build.resolve().is_relative_to(catalog.resolve()): raise ValueError('Invalid catalog base_path')
-    files = [catalog / 'manifest.json'] + sorted(build.rglob('*.json'))
     text_jobs = []
     file_map = {}
     previous_map = None

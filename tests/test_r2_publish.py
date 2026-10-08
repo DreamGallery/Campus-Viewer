@@ -50,10 +50,49 @@ class R2Tests(unittest.TestCase):
             root = Path(folder); self.stage(root, 'voice'); s3 = S3()
             for ext in ('flac', 'mp3', 'm4a'):
                 (root / 'releases/voice/audio/b' / ('clip.' + ext)).write_bytes(ext.encode())
+            (root / 'releases/voice/web/catalog/builds/one/chapters/a.json').write_text(json.dumps({
+                'clips': [{'url': '/audio/b/clip.' + ext} for ext in ('flac', 'mp3', 'm4a')]}))
             publish_release(root, 'voice', s3)
             for ext, mime in [('flac', 'audio/flac'), ('mp3', 'audio/mpeg'), ('m4a', 'audio/mp4')]:
                 key = next(k for k in s3.uploads if k.endswith('/clip.' + ext))
                 self.assertEqual(s3.content_types[key], mime)
+
+    def test_unused_cached_media_is_not_hashed_or_uploaded(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {
+                'CAMPUS_R2_ENDPOINT':'https://test', 'CAMPUS_R2_BUCKET':'b', 'CAMPUS_R2_PREFIX':'test',
+                'AWS_ACCESS_KEY_ID':'test', 'AWS_SECRET_ACCESS_KEY':'test'}):
+            root = Path(folder); self.stage(root, 'first'); s3 = S3()
+            stage = root / 'releases/first'
+            unused = [stage/'audio/b/unused.flac', stage/'web/assets/images/unused.webp']
+            for path in unused: path.write_bytes(b'unused')
+            # Two local references to identical named audio need only one upload.
+            (stage/'audio/c').mkdir()
+            (stage/'audio/c/1.wav').write_bytes(b'audio')
+            chapter = stage/'web/catalog/builds/one/chapters/a.json'
+            chapter.write_text(json.dumps({'clips': ['/audio/b/1.wav', '/audio/c/1.wav']}))
+            with patch('campus_story_index.r2_publish.digest', wraps=digest) as hashed:
+                publish_release(root, 'first', s3)
+            checked = [call.args[0] for call in hashed.call_args_list]
+            self.assertTrue(all(path not in checked for path in unused))
+            self.assertFalse(any('/unused.' in key for key in s3.uploads))
+            self.assertEqual(sum('/media/' in key for key in s3.uploads), 2)
+            mapping = json.loads(s3.objects['test/releases/first/file-map.json'])['files']
+            clips = json.loads(s3.objects['test/'+mapping['web/catalog/builds/one/chapters/a.json']])['clips']
+            self.assertEqual(clips[0], clips[1])
+
+    def test_missing_or_escaping_media_prevents_publication(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {
+                'CAMPUS_R2_ENDPOINT':'https://test', 'CAMPUS_R2_BUCKET':'b', 'CAMPUS_R2_PREFIX':'test',
+                'AWS_ACCESS_KEY_ID':'test', 'AWS_SECRET_ACCESS_KEY':'test'}):
+            root = Path(folder); self.stage(root, 'first'); s3 = S3()
+            chapter = root/'releases/first/web/catalog/builds/one/chapters/a.json'
+            for url in ('/audio/b/missing.flac', '/audio/../resource-snapshot.json'):
+                with self.subTest(url=url):
+                    chapter.write_text(json.dumps({'url': url}))
+                    with self.assertRaises((FileNotFoundError, ValueError)):
+                        publish_release(root, 'first', s3)
+                    self.assertEqual(s3.uploads, [])
+                    self.assertNotIn('test/current.json', s3.objects)
 
     def test_atomic_failure_dedupe_and_original_release_unchanged(self):
         with tempfile.TemporaryDirectory() as d, patch.dict(os.environ,{'CAMPUS_R2_ENDPOINT':'https://test','CAMPUS_R2_BUCKET':'b','CAMPUS_R2_PREFIX':'test','AWS_ACCESS_KEY_ID':'test','AWS_SECRET_ACCESS_KEY':'test','CAMPUS_R2_PUBLIC_BASE_URL':'https://assets.test'}):
