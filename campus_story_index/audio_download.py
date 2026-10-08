@@ -1,7 +1,6 @@
 """Download only referenced voice banks. No uploads, source deletion, or shell interpolation."""
 import argparse
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import configparser
 import hashlib
 import json
@@ -15,6 +14,7 @@ from urllib.parse import urljoin
 
 import requests
 from .io import atomic_write, digest
+from .parallel import map_bounded
 
 
 def fetch_manifest(config_path=None, config_repo=None, config_ref='API'):
@@ -152,17 +152,17 @@ def download_one(item, url_format, output, retries=3):
 
 def download_plan(plan, manifest, directory, workers=8):
     results = []
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(download_one, row, manifest['urlFormat'], Path(directory) / 'banks')
-                   for row in plan['resources']]
-        for future in as_completed(futures):
-            results.append(future.result())
-            if len(results) % 100 == 0 or len(results) == len(futures):
-                print(json.dumps({'completed': len(results), 'total': len(futures),
-                                  'statuses': dict(Counter(r['status'] for r in results))}), flush=True)
-                atomic_write(Path(directory) / 'download-progress.json', {
-                    'manifest_revision': plan['manifest_revision'],
-                    'results': sorted(results, key=lambda r: r['name'])})
+    jobs = plan['resources']
+    def process(row):
+        return download_one(row, manifest['urlFormat'], Path(directory) / 'banks')
+    for result in map_bounded(process, jobs, workers):
+        results.append(result)
+        if len(results) % 100 == 0 or len(results) == len(jobs):
+            print(json.dumps({'completed': len(results), 'total': len(jobs),
+                              'statuses': dict(Counter(r['status'] for r in results))}), flush=True)
+            atomic_write(Path(directory) / 'download-progress.json', {
+                'manifest_revision': plan['manifest_revision'],
+                'results': sorted(results, key=lambda r: r['name'])})
     report = {'manifest_revision': plan['manifest_revision'],
               'results': sorted(results, key=lambda r: r['name'])}
     atomic_write(Path(directory) / 'download-report.json', report)

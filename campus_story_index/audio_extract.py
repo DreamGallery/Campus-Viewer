@@ -1,7 +1,6 @@
 """ACB/AWB to FLAC, MP3 or AAC clips, with atomic completion manifests."""
 import argparse
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 import os
@@ -15,6 +14,7 @@ import wave
 from .audio_download import valid_download
 from .io import atomic_write, digest
 from .voice_encoding import encoding_settings, audio_suffix
+from .parallel import map_bounded
 
 
 def wav_metadata(path):
@@ -168,15 +168,15 @@ def extract_plan(plan, directory, decoder, workers=6, wait_seconds=0, settings=N
     resources = {r['name']: r for r in plan['resources']}
     banks = [r for r in plan['resources'] if r['name'].endswith('.acb')]
     results = []
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(decode_bank, row, resources.get(Path(row['name']).stem + '.awb'),
-                               directory, decoder, decoder_sha256, wait_seconds, settings) for row in banks]
-        for future in as_completed(futures):
-            results.append(future.result())
-            if len(results) % 100 == 0 or len(results) == len(futures):
-                print(json.dumps({'completed': len(results), 'total': len(futures),
-                                  'clips': sum(r.get('clips', 0) for r in results),
-                                  'statuses': dict(Counter(r['status'] for r in results))}), flush=True)
+    def process(row):
+        return decode_bank(row, resources.get(Path(row['name']).stem + '.awb'),
+                           directory, decoder, decoder_sha256, wait_seconds, settings)
+    for result in map_bounded(process, banks, workers):
+        results.append(result)
+        if len(results) % 100 == 0 or len(results) == len(banks):
+            print(json.dumps({'completed': len(results), 'total': len(banks),
+                              'clips': sum(r.get('clips', 0) for r in results),
+                              'statuses': dict(Counter(r['status'] for r in results))}), flush=True)
     report = {'manifest_revision': plan['manifest_revision'], 'decoder_sha256': decoder_sha256,
               'results': sorted(results, key=lambda r: r['bank'])}
     atomic_write(directory / 'extraction-report.json', report)

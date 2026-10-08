@@ -31,7 +31,7 @@ docker compose logs -f --tail=100 updater
 
 修改 `.env` 中的镜像版本后，重新执行 `docker compose pull updater` 和 `docker compose up -d updater`。保留原有挂载、账号目录和配置。
 
-`campus-r2-updater_runtime` 卷保存仓库、缓存、发布版本和增量基线。普通升级不要执行 `down -v`；同一 R2 前缀只运行一个更新器。此目录更名不改变 Compose 项目名或数据卷名，已有部署无需迁移数据。
+`campus-r2-updater_runtime` 卷保存仓库、缓存、发布版本和增量基线。普通升级不要执行 `down -v`；同一 R2 前缀只运行一个更新器。
 
 默认从游戏 API 获取 masterdb，Toolkit 配置使用 `API` 分支。容器无需开放入站端口，需要访问 GitHub、游戏资源服务和 R2。
 

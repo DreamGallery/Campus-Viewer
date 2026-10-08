@@ -95,7 +95,6 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(snapshot(data),{})
 
     def test_incremental_download_skips_unchanged_and_tracks_removals(self):
-        from types import SimpleNamespace
         from campus_story_index.game_package import build_package
         before=snapshot(manifest(62))
         current=manifest(63)
@@ -108,7 +107,7 @@ class ArchiveTests(unittest.TestCase):
             dest.mkdir(parents=True,exist_ok=True);(dest/item['name']).write_text('x');return {'status':'downloaded'}
         def extract(kind,item,raw,dest):
             (dest/item['name']).write_text('decoded')
-        with tempfile.TemporaryDirectory() as temp, patch.dict('sys.modules',{'UnityPy':SimpleNamespace(config=SimpleNamespace())}), patch('campus_story_index.game_package.download_one',side_effect=download) as fetch, patch('campus_story_index.game_package.extract_item',side_effect=extract):
+        with tempfile.TemporaryDirectory() as temp, patch('campus_story_index.game_package.configure_unity'), patch('campus_story_index.game_package.download_one',side_effect=download) as fetch, patch('campus_story_index.game_package.extract_item',side_effect=extract):
             output=build_package(Path(temp),current,before)
             self.assertEqual(fetch.call_count,1)
             info=json.loads((output/'package.json').read_text())

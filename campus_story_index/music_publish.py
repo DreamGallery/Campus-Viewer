@@ -1,7 +1,5 @@
 """Publish verified song assets first, then atomically switch an independent music index."""
 import argparse
-from concurrent.futures import ThreadPoolExecutor
-import copy
 import json
 import mimetypes
 import os
@@ -10,6 +8,7 @@ import tempfile
 import time
 
 from .r2_publish import client, settings, get_json, digest, UploadProgress
+from .parallel import map_bounded
 
 
 def prepare_library(directory, prefix, public_base):
@@ -20,8 +19,8 @@ def prepare_library(directory, prefix, public_base):
     if public_base and not public_base.startswith('https://'):
         raise ValueError('Public resource base must use HTTPS')
     jobs = {}
-    rewritten = copy.deepcopy(library)
-    for track in rewritten['tracks']:
+    paths = {}
+    for track in library['tracks']:
         if track.get('format') != 'flac' or not track['audio'].endswith('.flac'):
             raise ValueError('Music publication requires FLAC')
         for field in ('audio', 'cover'):
@@ -33,14 +32,15 @@ def prepare_library(directory, prefix, public_base):
             path = (directory / url[len('/music/'):]).resolve()
             if not path.is_relative_to(directory) or not path.is_file():
                 raise ValueError('Missing or unsafe music file')
-            sha = digest(path)
-            key = 'media/' + sha + '/' + path.name
+            if path not in paths:
+                paths[path] = 'media/' + digest(path) + '/' + path.name
+            key = paths[path]
             jobs[key] = path
             track[field] = (public_base.rstrip('/') + '/' + prefix if public_base else '') + '/' + key
-    return rewritten, jobs
+    return library, jobs
 
 
-def publish_music(directory, s3=None):
+def publish_music(directory, s3=None, inventory=None):
     bucket, prefix = settings()
     s3 = s3 or client()
     previous, etag = get_json(s3, bucket, prefix+'/music/current.json')
@@ -50,6 +50,11 @@ def publish_music(directory, s3=None):
     transfer = TransferConfig(multipart_threshold=64 * 1024 * 1024, max_concurrency=2)
     def upload(key, path, progress):
         sha = key.split('/')[1]
+        if inventory is not None and key in inventory:
+            if inventory[key] != path.stat().st_size:
+                raise ValueError('Immutable music resource size mismatch')
+            progress.finish('skipped')
+            return
         try:
             head = s3.head_object(Bucket=bucket, Key=prefix+'/'+key)
             if head.get('Metadata', {}).get('sha256') != sha:
@@ -76,9 +81,8 @@ def publish_music(directory, s3=None):
                 except Exception:
                     progress.finish('failed')
                     raise
-            with ThreadPoolExecutor(max_workers=max(1,min(8,int(os.getenv('CAMPUS_UPLOAD_WORKERS','4'))))) as pool:
-                for _ in pool.map(process, jobs.items()):
-                    pass
+            for _ in map_bounded(process, jobs.items(), max(1, min(8, int(os.getenv('CAMPUS_UPLOAD_WORKERS', '4'))))):
+                pass
     if previous and previous.get('library') == library_key:
         print('R2: 音乐索引未变化', flush=True)
         return previous

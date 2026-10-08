@@ -17,13 +17,13 @@ export class Github {
   constructor(public auth: Auth) {}
   async getContent(_owner: string, _repo: string, _branch: string, path: string) {
     try {
-      const file = await api<Content>('github/read', { kind: 'content', path });
+      const file = await api<Content>('github/read', { kind: 'content', path }, this.auth.csrf);
       if (!this.baseline.has(path)) this.baseline.set(path, file.sha);
       return file;
     } catch (e) { if ((e as { response?: { status: number } }).response?.status === 404 && !this.baseline.has(path)) this.baseline.set(path, null); throw e; }
   }
   async getIssue(_owner: string, _repo: string, number: number) {
-    const issue = await api<Issue>('github/read', { kind: 'issue', number });
+    const issue = await api<Issue>('github/read', { kind: 'issue', number }, this.auth.csrf);
     this.issues.set(number, issue); return issue;
   }
   async updateIssue(_owner: string, _repo: string, number: number, data: unknown) {

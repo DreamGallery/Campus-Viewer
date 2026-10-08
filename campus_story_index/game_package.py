@@ -1,5 +1,5 @@
 """Toolkit API-compatible game update output, with verified downloads and resumable work."""
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from .parallel import map_bounded
 import hashlib
 import json
 import os
@@ -10,6 +10,7 @@ import shutil
 from .audio_download import download_one
 from .io import atomic_write
 from .web_assets import decode_header
+from .unity import configure_unity
 
 ASSET = {'crw': 'sticker', 'eff': 'effect', 'env': 'environment', 'fbx': 'model/fbx_model',
          'fgd': 'image/fgd', 'img': 'image', 'mdl': 'model', 'mef': 'sticker/face',
@@ -81,8 +82,7 @@ def extract_item(kind, item, raw, dest):
 
 
 def build_package(root, manifest, before, full=False):
-    import UnityPy
-    UnityPy.config.FALLBACK_UNITY_VERSION = '2022.3.21f1'
+    configure_unity()
     current = snapshot(manifest)
     changes = [(kind, row) for kind in ('assetBundleList', 'resourceList') for row in manifest[kind]
                if row.get('state') != 4 and (full or before.get(kind + '/' + row['name']) != current[kind + '/' + row['name']])]
@@ -106,14 +106,9 @@ def build_package(root, manifest, before, full=False):
             extract_item(kind, item, raw_dir / item['name'], item_dir)
             marker.write_text('ok')
         return item_dir
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(process, pair): pair for pair in changes}
-        completed = 0
-        for future in as_completed(futures):
-            future.result()
-            completed += 1
-            if completed % 100 == 0 or completed == len(changes):
-                print(f'Game package: {completed}/{len(changes)}', flush=True)
+    for completed, _ in enumerate(map_bounded(process, changes, workers), 1):
+        if completed % 100 == 0 or completed == len(changes):
+            print(f'Game package: {completed}/{len(changes)}', flush=True)
     # Merge in manifest order like the source layout. Keep unscaled originals alongside stretch/.
     for kind, item in changes:
         item_dir = work / 'processed' / kind / item['name']

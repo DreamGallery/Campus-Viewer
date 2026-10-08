@@ -1,6 +1,5 @@
 """Publish immutable resources, then switch one R2 pointer. Never scan/delete foreign keys."""
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import mimetypes
@@ -9,6 +8,7 @@ from pathlib import Path
 import re
 import time
 from threading import Event, Lock, Thread
+from .parallel import map_bounded
 
 
 def settings():
@@ -153,9 +153,8 @@ def publish_release(root, release, s3=None):
                     # Do not log exception messages: SDK errors may contain credentials or URLs.
                     print(f'R2 [{label}] 文件上传失败: {type(exc).__name__}', flush=True)
                     raise
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                for _ in pool.map(process, jobs):
-                    pass
+            for _ in map_bounded(process, jobs, workers):
+                pass
 
     print('R2: 正在扫描图片和语音并计算校验值', flush=True)
     public_base = os.getenv('CAMPUS_R2_PUBLIC_BASE_URL', '').rstrip('/')
@@ -192,14 +191,18 @@ def publish_release(root, release, s3=None):
     if previous:
         previous_map, _ = get_json(s3, bucket, prefix + '/releases/' + previous['release'] + '/file-map.json')
     def add_text(path, relative):
-        # Reuse already-published legacy CSV/TXT on the first upgrade as well.
-        old = root / 'releases' / previous['release'] / relative if previous else None
-        if relative.startswith(('story/', 'adv/')) and old and old.is_file() and digest(old) == digest(path):
+        sha = digest(path)
+        if relative.startswith(('story/', 'adv/')) and previous:
             old_key = (previous_map or {}).get('files', {}).get(relative) if previous_map else 'releases/' + previous['release'] + '/' + relative
-            if old_key:
+            hashed = re.fullmatch(r'text/([a-f0-9]{64})/[^/]+', old_key or '')
+            old = root / 'releases' / previous['release'] / relative
+            # Immutable text keys already record the previous checksum. Legacy
+            # releases still need their local baseline checked before reuse.
+            old_sha = hashed[1] if hashed else digest(old) if old_key and old.is_file() else None
+            if old_sha == sha:
                 file_map[relative] = old_key
                 return
-        key = 'text/' + digest(path) + '/' + path.name
+        key = 'text/' + sha + '/' + path.name
         file_map[relative] = key
         text_jobs.append((path, key))
     for source in files:
@@ -229,7 +232,7 @@ def publish_release(root, release, s3=None):
     batch('版本信息', metadata_jobs, workers=1)
     if (stage / 'music/library.json').is_file():
         from .music_publish import publish_music
-        publish_music(stage / 'music', s3)
+        publish_music(stage / 'music', s3, inventory=remote_media)
     print('R2: 正在切换已发布版本', flush=True)
     pointer = {'schema_version': 1, 'release': release, 'published_at': int(time.time()), 'versions': versions}
     # Conditional publication rejects competing updaters, including the first publication.

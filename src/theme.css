@@ -105,12 +105,13 @@
 .resource-versions summary { display:flex; align-items:center; gap:5px; cursor:pointer; list-style:none; padding:3px 0; font-size:inherit; }
 .resource-versions summary::-webkit-details-marker { display:none; }
 .resource-versions[open] summary svg { transform:rotate(180deg); }
-.resource-version-menu { position:absolute; right:0; top:calc(100% + 10px); width:min(290px, calc(100vw - 32px)); padding:16px; z-index:100; border:1px solid var(--line); border-radius:10px; background:rgba(255,255,255,.96); backdrop-filter:blur(18px); box-shadow:0 12px 35px #0002; white-space:normal; }
+.resource-version-menu { position:absolute; right:0; top:calc(100% + 10px); width:min(290px, calc(100vw - 32px)); max-height:calc(100dvh - 144px); overflow-y:auto; overscroll-behavior:contain; padding:16px; z-index:100; border:1px solid var(--line); border-radius:10px; background:rgba(255,255,255,.96); backdrop-filter:blur(18px); box-shadow:0 12px 35px #0002; white-space:normal; }
 .resource-version-menu strong { font-size:13px; }
 .resource-version-menu p { font-size:12px; margin:12px 0 0; line-height:1.6; }
 .resource-version-menu a { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 0; color:inherit; border-bottom:1px solid var(--line); text-decoration:none; }
 .resource-version-menu a:last-child { border-bottom:0; padding-bottom:0; }
-.resource-version-menu a span { display:grid; gap:4px; }
+.resource-version-menu a span { display:grid; min-width:0; gap:4px; overflow-wrap:anywhere; }
+.resource-version-menu a svg { flex-shrink:0; }
 .resource-version-menu a small { font-size:11px; }
 .resource-version-menu a:hover b { text-decoration:underline; }
 [data-theme="dark"] .resource-version-menu { background:rgba(25,29,35,.96); }
@@ -119,7 +120,11 @@
 @media (max-width:700px) {
   .header { display:flex; flex-wrap:wrap; gap:8px; }
   .header nav { order:3; width:100%; margin-top:0; gap:10px; }
-  .header-tools { position:static; margin-left:auto; }
+  .header-tools { position:relative; inset:auto; margin-left:auto; }
+  .resource-versions { position:static; }
+  .resource-version-menu { width:min(248px, calc(100vw - 32px)); max-height:min(360px, calc(100dvh - 144px)); padding:12px; }
+  .resource-version-menu a { min-height:44px; gap:10px; padding:10px 0; }
+  .resource-version-menu a b { font-size:12px; }
   .brand { font-size:17px; gap:8px; }
   .brand-mark { width:32px; height:32px; flex-basis:32px; }
 }

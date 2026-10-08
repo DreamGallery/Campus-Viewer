@@ -2,7 +2,7 @@
 Header deobfuscation adapted from the user's HatsuboshiWebsite/src/decrypt.py.
 """
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from .parallel import map_bounded
 import hashlib
 import json
 from pathlib import Path
@@ -12,6 +12,7 @@ import tempfile
 from .audio_download import download_one
 from .io import atomic_write
 from .pending_text import filename_hints
+from .unity import DEFAULT_UNITY_VERSION, configure_unity
 
 
 # Verified notice-list artwork for events whose ordinary large banner is absent.
@@ -23,6 +24,20 @@ EVENT_COVER_ALTERNATIVES = {
     'img_general_event_story_event-story-005-story-banner':
         'img_notice_notice-list_event_story_event-story-005-banner',
 }
+
+
+def event_cover_candidates(name, header=None):
+    """Recognize numbered story banners while keeping the resource suffix."""
+    match = re.fullmatch(r'(.+)-story-banner(-\d+)?', name or '')
+    if not match:
+        return []
+    candidates = [name, match[1] + '-banner' + (match[2] or '')]
+    alternative = EVENT_COVER_ALTERNATIVES.get(name)
+    if alternative:
+        candidates.append(alternative)
+    if match[2] and header and header.startswith('img_'):
+        candidates.append(header)
+    return list(dict.fromkeys(candidates))
 
 
 def decode_header(payload, name):
@@ -48,6 +63,7 @@ def decode_header(payload, name):
 
 def image_requests(catalog):
     names = set()
+    records = {r['id']: r['data'] for r in catalog.get('source_records', [])}
     stamp_characters = {c['id'] for c in catalog['characters'] if c['is_playable']}
     stamp_characters.update(cid for g in catalog['groups'] if g['kind'] == 'support_card'
                             for cid in g.get('character_ids', []))
@@ -69,10 +85,8 @@ def image_requests(catalog):
             name = f'img_general_{name}_full'
         if name.startswith('img_'):
             names.add(name)
-            if name in EVENT_COVER_ALTERNATIVES:
-                names.add(EVENT_COVER_ALTERNATIVES[name])
-            if name.endswith('-story-banner'):
-                names.add(name.removesuffix('-story-banner') + '-banner')
+            header = records.get(g.get('source_record_id'), {}).get('headerAssetId')
+            names.update(event_cover_candidates(name, header))
     for record in catalog.get('source_records', []):
         if record['id'].startswith('MainStoryChapter:'):
             asset_id = record['data'].get('storyAssetId')
@@ -85,7 +99,7 @@ def image_requests(catalog):
 
 
 def is_event_banner(name):
-    return bool(re.fullmatch(r"img_general.*event.*(?<!story)(?<!reward)(?<!rev)-banner", name))
+    return bool(re.fullmatch(r"img_general.*event.*(?<!story)(?<!reward)(?<!rev)-banner(?:-\d+)?", name))
 
 
 def display_size(name, source_size=None):
@@ -161,26 +175,25 @@ def main():
     p.add_argument('--output', type=Path, default=Path('data/web/assets'))
     p.add_argument('--cache', type=Path, default=Path('data/images/bundles'))
     p.add_argument('--workers', type=int, default=4)
-    p.add_argument('--unity-version', default='2022.3.21f1', help='Fallback version from HatsuboshiWebsite config')
+    p.add_argument('--unity-version', default=DEFAULT_UNITY_VERSION,
+                   help='Unity version for bundles without version metadata (default: %(default)s)')
     args = p.parse_args()
-    import UnityPy
-    UnityPy.config.FALLBACK_UNITY_VERSION = args.unity_version
+    configure_unity(args.unity_version)
     if not 1 <= args.workers <= 8:
         p.error('workers must be 1..8')
     manifest = json.loads(args.manifest.read_text())
     assets = {r['name']: r for r in manifest['assetBundleList'] if r.get('state') != 4}
     names = image_requests(json.loads(args.catalog.read_text()))
     results = [{'name': name, 'status': 'not_in_manifest'} for name in names if name not in assets]
-    with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = {pool.submit(extract_one, assets[name], manifest['urlFormat'], args.cache,
-                               args.output / 'images'): name for name in names if name in assets}
-        for future in as_completed(futures):
-            try:
-                results.append(future.result())
-            except Exception as exc:
-                results.append({'name': futures[future], 'status': 'failed', 'error': type(exc).__name__ + ': ' + str(exc)[:160]})
-            if len(results) % 20 == 0:
-                print(f'{len(results)}/{len(names)} images', flush=True)
+    def process(name):
+        try:
+            return extract_one(assets[name], manifest['urlFormat'], args.cache, args.output / 'images')
+        except Exception as exc:
+            return {'name': name, 'status': 'failed', 'error': type(exc).__name__ + ': ' + str(exc)[:160]}
+    for result in map_bounded(process, (name for name in names if name in assets), args.workers):
+        results.append(result)
+        if len(results) % 20 == 0:
+            print(f'{len(results)}/{len(names)} images', flush=True)
     atomic_write(args.output / 'manifest.json', {'revision': manifest['revision'],
                  'images': sorted(results, key=lambda r: r['name'])})
     (args.output / 'manifest.json').chmod(0o644)

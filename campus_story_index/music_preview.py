@@ -13,6 +13,7 @@ import yaml
 from .audio_download import download_one
 from .io import atomic_write
 from .web_assets import decode_header, extract_one
+from .unity import configure_unity
 
 DEFAULT_IDS = ['music-char-' + cid + '-001' for cid in ('hski', 'ttmr', 'fktn', 'shro', 'jsna', 'atbm')]
 
@@ -32,7 +33,7 @@ def timed_lyrics(rows, start=0, clip_in=0, scale=1):
 
 def extract_lyrics(path, name, song):
     import UnityPy
-    UnityPy.config.FALLBACK_UNITY_VERSION = '2022.3.21f1'
+    configure_unity()
     env = UnityPy.load(decode_header(path.read_bytes(), name))
     files = {}
     for obj in env.objects:
@@ -75,9 +76,10 @@ def select_music(rows, resources, ids=None, scope='vocal'):
 
 
 def publish_file(source, output, suffix=None):
-    name = source.stem + '-' + file_digest(source)[:16] + (suffix or source.suffix)
+    sha = file_digest(source)
+    name = source.stem + '-' + sha[:16] + (suffix or source.suffix)
     target = output / name
-    if not target.is_file() or file_digest(target) != file_digest(source):
+    if not target.is_file() or file_digest(target) != sha:
         temporary = output / ('.' + name + '.tmp')
         shutil.copyfile(source, temporary)
         temporary.chmod(0o644)
@@ -143,6 +145,7 @@ def main():
     selected = select_music(music, resources, args.ids, args.scope)
     if not selected:
         raise ValueError('No available songs; refusing to replace existing library')
+    configure_unity()
     args.output.mkdir(parents=True, exist_ok=True)
     args.cache.mkdir(parents=True, exist_ok=True)
     decoder_hash = file_digest(args.decoder)

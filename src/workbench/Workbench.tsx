@@ -1,10 +1,10 @@
 import { taskDatePages } from './date-pages';
 import { TaskExport } from './TaskExport';
 import { exportTxt, downloadFile } from './export';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Link } from 'react-router-dom';
 import { api, Auth, Github, decode, encode, Issue } from './github';
-import { CsvTextInfo, extractInfoFromCsvText, mergeTranslation, toCsvText } from './upstream/csv';
+import { CsvDataLine, CsvTextInfo, extractInfoFromCsvText, mergeTranslation, toCsvText } from './upstream/csv';
 import { displayWorkUser, findWorkUser, subscribeWorkUsers, workUsersVersion, applyTrack, completeStage, completionPath, docFromIssue, DocTask, draftInfoOf, fetchRecordForWrite, myStatusOf, sameWorkUser, saveDraft, setAssigneeUsers, syncRecordTracks, TrackKey, validateRowsHtmlTags, WORK_BRANCH, WORK_OWNER, WORK_REPO } from './upstream/workflow';
 import { docStatus, STORY_LABELS, storyKind } from './upstream/document-filter';
 import { ArrowLeft, UserRound } from 'lucide-react';
@@ -13,6 +13,7 @@ import { VoicePlayer } from './VoicePlayer';
 import { CompletionStats } from './CompletionStats';
 import { TranslationInput } from './TranslationInput';
 import { longLines } from './text-format';
+import { chapterVoiceMap, type VoiceLine } from './voice-map';
 import './workbench.css';
 
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
@@ -26,7 +27,7 @@ export function Login({ auth, refresh }: { auth: Auth | null; refresh: () => voi
   return <div className="work-login">{auth?.user ? <><span>{findWorkUser(auth.user.login)?.[0] || auth.user.name || auth.user.login}</span><button onClick={() => { api('auth/logout', {}, auth.csrf).then(refresh).catch(e => setError(message(e))); }}>退出登录</button></> : auth?.configured ? <a className="work-button" href={'/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search)}>GitHub 登录</a> : <span>{auth ? "GitHub 登录尚未配置" : "正在检查登录状态…"}</span>}{error && <span role="alert">{error}</span>}</div>;
 }
 export function WorkbenchPage() {
-  useSyncExternalStore(subscribeWorkUsers, workUsersVersion);
+  const usersVersion = useSyncExternalStore(subscribeWorkUsers, workUsersVersion);
   const [auth, setAuth] = useState<Auth | null>(null);
   const [docs, setDocs] = useState<DocTask[]>([]), [error, setError] = useState('');
   const [loading, setLoading] = useState(true), [reload, setReload] = useState(0);
@@ -47,14 +48,14 @@ export function WorkbenchPage() {
       const a = await api<Auth>('auth/status');
       if (!active) return;
       setAuth(a);
-      if (!a.canCollaborate) return;
+      if (!a.canCollaborate) { setAssigneeUsers({}); return; }
       const w = new Github(a);
       const users = await w.getContent(WORK_OWNER, WORK_REPO, WORK_BRANCH, 'users.json').catch(e => { if (e.response?.status !== 404) throw e; return null; });
       if (!active) return;
       setAssigneeUsers(users ? JSON.parse(decode(users.content)) : {});
       const all: DocTask[] = [];
       for (let p = 1; p <= 100; p++) {
-        const batch = await api<Issue[]>('github/read', { kind: 'issues', page: p });
+        const batch = await api<Issue[]>('github/read', { kind: 'issues', page: p }, a.csrf);
         if (!active) return;
         all.push(...batch.filter(i => !i.pull_request).map(docFromIssue));
         if (batch.length < 100) { setDocs([...new Map(all.map(d => [d.number, d])).values()]); return; }
@@ -91,13 +92,19 @@ export function WorkbenchPage() {
       setClaimNotice(`已认领 ${completed} 项${failures.length ? '\n' + failures.join('\n') : ''}`);
     }
   }
-  const shown = docs.filter(d => d.title.toLowerCase().includes(search.trim().toLowerCase())
-    && (!mine || !!auth?.user && [d.tr.user, d.pr.user].some(u => sameWorkUser(u, auth.user!.login)))
-    && (category === 'all' || storyKind(d.title) === category)
-    && (status === 'all' || docStatus(d) === status));
-  if (sort === 'updated') shown.sort((a,b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.number - b.number);
-  if (sort === 'name') shown.sort((a,b) => a.title.localeCompare(b.title, 'ja', { numeric: true }) || a.number - b.number);
-  const datePages = taskDatePages(shown);
+  const shown = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const result = docs.filter(d => d.title.toLowerCase().includes(query)
+      && (!mine || !!auth?.user && [d.tr.user, d.pr.user].some(u => sameWorkUser(u, auth.user!.login)))
+      && (category === 'all' || storyKind(d.title) === category)
+      && (status === 'all' || docStatus(d) === status));
+    if (sort === 'updated') result.sort((a,b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.number - b.number);
+    if (sort === 'name') result.sort((a,b) => a.title.localeCompare(b.title, 'ja', { numeric: true }) || a.number - b.number);
+    return result;
+    // User aliases affect the “my tasks” filter even when the task list is unchanged.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docs, search, mine, auth?.user, category, status, sort, usersVersion]);
+  const datePages = useMemo(() => taskDatePages(shown), [shown]);
   const pages = Math.max(1, datePages.length);
   const currentPage = Math.min(page, pages);
   const currentDate = datePages[currentPage - 1];
@@ -154,6 +161,12 @@ function Speaker({ name, index, choice }: { name: string; index: number; choice:
   const [failed, setFailed] = useState(false);
   return <div className="work-speaker"><span className="work-speaker-avatar">{avatar && !failed ? <img src={avatar} alt="" loading="lazy" onError={() => setFailed(true)} /> : <UserRound size={24} aria-hidden="true" />}</span><small>{String(index + 1).padStart(3, '0')} · {label}</small></div>;
 }
+const EditorRow = memo(function EditorRow({ row, index, clips, busy, onChange, onPlay }: {
+  row: CsvDataLine; index: number; clips?: VoiceLine['clips']; busy: boolean;
+  onChange: (index: number, value: string) => void; onPlay: (audio: HTMLAudioElement) => void;
+}) {
+  return <article className="work-row"><div className="work-original"><Speaker name={row.name} index={index} choice={row.id === 'select'} /><p>{row.text.replace(/\\n/g, '\n')}</p>{clips && <VoicePlayer clips={clips} row={index + 1} onPlay={onPlay} />}</div><TranslationInput index={index} value={row.trans} disabled={busy} onChange={trans => onChange(index, trans)} /></article>;
+});
 export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voices?: ChapterVoices }) {
   useSyncExternalStore(subscribeWorkUsers, workUsersVersion);
   const playingAudio = useRef<HTMLAudioElement | null>(null);
@@ -175,7 +188,7 @@ export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voice
   }, [scriptId, storageKey]);
   useEffect(() => { setRemoteReady(false); wrapper.current = null; }, [auth?.user?.login]);
   useEffect(() => {
-    if (!auth?.user) return;
+    if (!auth?.canCollaborate) { setAssigneeUsers({}); return; }
     let active = true;
     new Github(auth).getContent(WORK_OWNER, WORK_REPO, WORK_BRANCH, 'users.json').then(file => {
       if (active) setAssigneeUsers(JSON.parse(decode(file.content)));
@@ -193,7 +206,7 @@ export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voice
     if (auth.work.owner !== WORK_OWNER || auth.work.repo !== WORK_REPO || auth.work.branch !== WORK_BRANCH) throw new Error('前后端工作仓库配置不一致');
     const w = new Github(auth);
     try { const users = await w.getContent(WORK_OWNER, WORK_REPO, WORK_BRANCH, 'users.json'); setAssigneeUsers(JSON.parse(decode(users.content))); } catch (e) { if ((e as { response?: { status: number } }).response?.status !== 404) throw e; }
-    const matches = await api<Issue[]>('github/read', { kind: 'findIssue', scriptId }); const found = matches[0] && docFromIssue(matches[0]);
+    const matches = await api<Issue[]>('github/read', { kind: 'findIssue', scriptId }, auth.csrf); const found = matches[0] && docFromIssue(matches[0]);
     if (!found) throw new Error('工作仓库尚未建立本章节任务；可以先本地编辑并导出 CSV');
     const record = await fetchRecordForWrite(w, scriptId);
     baseRevision.current = { tr: Number(record.translation?.revision || 0), pr: Number(record.proofread?.revision || 0) };
@@ -247,16 +260,15 @@ export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voice
     setChanged(false);
   }
   const active = task && auth?.user ? myStatusOf(task.tr, task.pr, auth.user.login, revising ? role : undefined) : null;
-  const voiceMap = new Map<number, NonNullable<ChapterVoices>['lines'][number]>();
-  if (doc && source.current && voices?.source_sha256 === sourceHash) {
-    for (const line of voices.lines) {
-      const record = source.current.records[line.record_index - 1];
-      if (record && record.text === line.text && record.name === line.speaker) {
-        const index = source.current.data.indexOf(record);
-        if (index >= 0) voiceMap.set(index, line);
-      }
-    }
-  }
+  const voiceMap = useMemo(() => chapterVoiceMap(source.current, sourceHash, voices), [sourceHash, voices]);
+  const updateTranslation = useCallback((index: number, trans: string) => {
+    setDoc(d => d && ({ ...d, data: d.data.map((r, n) => n === index ? { ...r, trans } : r) }));
+    setChanged(true);
+  }, []);
+  const playVoice = useCallback((audio: HTMLAudioElement) => {
+    if (playingAudio.current !== audio) playingAudio.current?.pause();
+    playingAudio.current = audio;
+  }, []);
   const rows = doc?.data.map((row, i) => ({ row, i })).filter(({ row }) => (!onlyEmpty || !row.trans.trim()) && (!search || [row.name, row.text, row.trans].some(t => t.includes(search))));
   return <section className="work-editor" aria-label="剧情翻译编辑器"><header><h2>剧情文本</h2><Login auth={auth} refresh={refreshAuth} /></header>
     <div className="work-toolbar"><span>{remoteLabel} · {doc?.data.filter(r => r.trans.trim()).length || 0} / {doc?.data.length || 0}</span><button disabled={!doc} onClick={() => doc && download(toCsvText(doc), scriptId + '.csv')}>导出 CSV</button><label className="work-button">导入 CSV<input type="file" accept=".csv,text/csv" hidden disabled={!doc || busy} onChange={e => { const file = e.target.files?.[0]; if (file && source.current) run(async () => { setDoc(mergeTranslation(source.current!, await file.text())); setChanged(true); setRemoteLabel('导入译文'); }); e.target.value = ''; }} /></label><button disabled={!doc || busy} onClick={() => run(async () => { if (doc) { downloadFile(await exportTxt(scriptId, toCsvText(doc)), scriptId + '.txt'); setNotice('TXT 已导出；未翻译的台词保留原文'); } })}>导出 TXT</button>{draftAvailable && <button onClick={() => download(draftAvailable, scriptId + '-旧草稿.csv')}>下载旧草稿</button>}</div>
@@ -264,7 +276,7 @@ export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voice
     {remoteReady && task && <><p>翻译：{task.tr.state} {displayWorkUser(task.tr.user) || '—'} / 校对：{task.pr.state} {displayWorkUser(task.pr.user) || '—'}</p><div className="work-toolbar">{(['ai', 'translated', 'proofread', 'draft'] as const).map((s, i) => <button disabled={busy} key={s} onClick={() => run(() => loadStage(s))}>{['载入机器译文', '载入翻译稿', '载入校对稿', '恢复远端草稿'][i]}</button>)}</div>{active?.blocked && <p>{active.blockMsg}</p>}</>}
     </div>}{error && <p className="work-error" role="alert">{error}</p>}{notice && <p className="work-notice" role="status">{notice}</p>}{busy && <p role="status">正在处理…</p>}
     {voices?.source_sha256 && sourceHash && voices.source_sha256 !== sourceHash && <p className="work-notice">原文版本与语音索引不一致，请更新索引后播放。</p>}
-    {doc ? <><div className="work-toolbar"><input aria-label="搜索台词" placeholder="搜索角色或台词" value={search} onChange={e => setSearch(e.target.value)} /><button aria-pressed={onlyEmpty} onClick={() => setOnlyEmpty(!onlyEmpty)}>只看未翻译</button><span>编辑自动保存到此浏览器；上传需点击「保存 GitHub 草稿」</span></div><div className="work-rows">{rows?.map(({ row, i }) => <article className="work-row" key={i}><div className="work-original"><Speaker name={row.name} index={i} choice={row.id === "select"} /><p>{row.text.replace(/\\n/g, '\n')}</p>{voiceMap.get(i) && <VoicePlayer clips={voiceMap.get(i)!.clips} row={i + 1} onPlay={audio => { if (playingAudio.current !== audio) playingAudio.current?.pause(); playingAudio.current = audio; }} />}</div><TranslationInput index={i} value={row.trans} disabled={busy} onChange={trans => { setDoc(d => d && ({ ...d, data: d.data.map((r, n) => n === i ? { ...r, trans } : r) })); setChanged(true); }} /></article>)}</div></> : !error && <p>正在读取原文…</p>}
+    {doc ? <><div className="work-toolbar"><input aria-label="搜索台词" placeholder="搜索角色或台词" value={search} onChange={e => setSearch(e.target.value)} /><button aria-pressed={onlyEmpty} onClick={() => setOnlyEmpty(!onlyEmpty)}>只看未翻译</button><span>编辑自动保存到此浏览器；上传需点击「保存 GitHub 草稿」</span></div><div className="work-rows">{rows?.map(({ row, i }) => <EditorRow key={i} row={row} index={i} clips={voiceMap.get(i)?.clips} busy={busy} onChange={updateTranslation} onPlay={playVoice} />)}</div></> : !error && <p>正在读取原文…</p>}
     {doc && auth?.canCollaborate && <footer className="work-editor-actions">{remoteReady && task && <div className="work-toolbar"><button disabled={busy || active?.activeRole !== role} onClick={() => run(() => submit(false))}>保存 GitHub 草稿</button><button className="work-primary" disabled={busy || active?.activeRole !== role} onClick={() => run(() => submit(true))}>完成{role === 'tr' ? '翻译' : '校对'}</button></div>}    {lengthConfirmation && doc && <div className="work-length-confirm" role="alert">
       <strong>有 {longLines(doc.data).length} 行译文超过 21 字</strong>
       <p>{longLines(doc.data).map(w => `第 ${w.row} 条台词的第 ${w.line} 行（${w.length} 字）`).join('、')}</p>

@@ -10,7 +10,6 @@ import { mergeScriptText } from '../script-text'
 // 一个人可两轨都接，也可两人分接。issue 的 assignees = 两轨认领人的并集（便于 GitHub 侧可见 + 我的任务过滤）。
 // 文件路径用阶段目录标记；旧 issue 的 <!-- path: data/... --> 仍可兼容。
 
-import { parseGithubBlobUrl } from './path'
 import { extractInfoFromCsvText, setCsvTranslator } from './csv'
 import { storyKind } from './document-filter'
 
@@ -21,7 +20,6 @@ export const WORK_BRANCH = import.meta.env.VITE_WORK_BRANCH || 'main'
 
 export const STATES = ['待认领', '进行中', '完成'] as const
 export type TrackState = (typeof STATES)[number]
-export const ARCHIVED_LABEL = '已存档'
 
 export type TrackKey = 'tr' | 'pr'
 export const TRACK_LABEL: Record<TrackKey, string> = { tr: '翻译', pr: '校对' }
@@ -58,346 +56,6 @@ export interface DocTask {
   pr: Track
   createdAt?: string // issue 创建时间(ISO)
   updatedAt: string // issue 最后更新时间(ISO)
-  sourceCommitTime?: string // 原始文本首次进入源仓库的 commit 时间
-  trCsvTime?: string // translated_csv 最后 commit 时间（页面异步填充）
-  prCsvTime?: string // proofread_csv 最后 commit 时间（页面异步填充）
-}
-
-// commit 时间查询是这几个列表页的主要开销（一个文件一次请求），但结果几乎不变：
-// 首次 commit 时间是不变量，最后 commit 时间只在 issue 更新时才可能变。
-// 缓存在 localStorage，键里带版本；空结果不缓存（文件以后可能出现）。
-const TIME_CACHE_KEY = 'gv:commit-times'
-let timeCache: Record<string, string> | null = null
-let flushTimer: ReturnType<typeof setTimeout> | null = null
-
-function readTimeCache(): Record<string, string> {
-  if (!timeCache) {
-    try {
-      timeCache = JSON.parse(localStorage.getItem(TIME_CACHE_KEY) || '{}')
-    } catch {
-      timeCache = {}
-    }
-  }
-  return timeCache as Record<string, string>
-}
-
-function putCachedTime(key: string, value: string) {
-  if (!value) return
-  const cache = readTimeCache()
-  // ponytail: 满了就整个丢掉重建，不做 LRU；重建成本就是再查一遍
-  if (Object.keys(cache).length > 20000) timeCache = {}
-  ;(timeCache as Record<string, string>)[key] = value
-  if (flushTimer) return
-  flushTimer = setTimeout(() => {
-    flushTimer = null
-    try {
-      localStorage.setItem(TIME_CACHE_KEY, JSON.stringify(timeCache))
-    } catch {
-      // 配额满或隐私模式：放弃缓存，不影响功能
-    }
-  }, 500)
-}
-
-// 某文件在工作仓库的最后 commit 时间（ISO）；文件不存在返回 ''。
-// 不缓存也不复用：这个值每次完成都会变，缓存住就会显示上一次的时间。
-// 只对当前页那几十行查询，代价可接受。
-export async function fileCommitTime(
-  wrapper: any,
-  path: string
-): Promise<string> {
-  try {
-    const { data } = await wrapper.request(
-      'GET /repos/{owner}/{repo}/commits',
-      {
-        owner: WORK_OWNER,
-        repo: WORK_REPO,
-        path,
-        per_page: 1,
-        _cb: Date.now(),
-        headers: { 'X-GitHub-Api-Version': '2022-11-28' },
-      }
-    )
-    return data?.[0]?.commit?.committer?.date || ''
-  } catch {
-    return ''
-  }
-}
-
-async function firstFileCommitTimeInRepo(
-  wrapper: any,
-  owner: string,
-  repo: string,
-  path: string,
-  branch = 'main'
-): Promise<string> {
-  try {
-    for (let page = 1; ; page++) {
-      const { data } = await wrapper.request(
-        'GET /repos/{owner}/{repo}/commits',
-        {
-          owner,
-          repo,
-          sha: branch,
-          path,
-          per_page: 100,
-          page,
-          headers: { 'X-GitHub-Api-Version': '2022-11-28' },
-        }
-      )
-      if (!data?.length) return ''
-      if (data.length < 100)
-        return data[data.length - 1]?.commit?.committer?.date || ''
-    }
-  } catch {
-    return ''
-  }
-}
-
-export async function docSourceCommitTime(
-  wrapper: any,
-  d: Pick<DocTask, 'title' | 'rawPath' | 'aiPath'>
-): Promise<string> {
-  // 原文首次入库时间不会变，命中缓存就完全不发请求（一条最多省 3 次）
-  const key = `src:${d.title}`
-  const hit = readTimeCache()[key]
-  if (hit) return hit
-  const [owner, repo] = CAMPUS_REPO.split('/')
-  const campus =
-    owner && repo
-      ? await firstFileCommitTimeInRepo(
-          wrapper,
-          owner,
-          repo,
-          `Resource/${d.title}.txt`
-        )
-      : ''
-  const time =
-    campus ||
-    (await firstFileCommitTimeInRepo(
-      wrapper,
-      WORK_OWNER,
-      WORK_REPO,
-      d.rawPath,
-      WORK_BRANCH
-    )) ||
-    (await firstFileCommitTimeInRepo(
-      wrapper,
-      WORK_OWNER,
-      WORK_REPO,
-      d.aiPath,
-      WORK_BRANCH
-    ))
-  putCachedTime(key, time)
-  return time
-}
-
-export function sortBySourceCommitTime(a: DocTask, b: DocTask) {
-  return (
-    (b.sourceCommitTime || b.updatedAt || '').localeCompare(
-      a.sourceCommitTime || a.updatedAt || ''
-    ) || a.title.localeCompare(b.title)
-  )
-}
-
-// 入库时间清单：一次 raw 请求换掉几百次 commit 查询。
-// 清单缺失或缺项时自动退回逐个查，所以它只是加速器，不是必需品。
-export const SOURCE_TIMES_PATH = 'source_times.json'
-let sourceTimesLoaded = false
-
-export async function loadSourceTimes(): Promise<void> {
-  if (sourceTimesLoaded) return
-  sourceTimesLoaded = true
-  try {
-    const res = await fetch(workRawUrl(SOURCE_TIMES_PATH))
-    if (!res.ok) return
-    Object.entries((await res.json()) as Record<string, string>).forEach(
-      ([title, iso]) => putCachedTime(`src:${title}`, String(iso || ''))
-    )
-  } catch {
-    // 清单不存在就当没有，逐个查
-  }
-}
-
-// 管理页手动触发：把当前所有文件的入库时间写成清单，和远端已有内容合并
-export async function saveSourceTimes(
-  wrapper: any,
-  docs: DocTask[]
-): Promise<number> {
-  const filled = await fillDocSourceCommitTimes(wrapper, docs)
-  // 合并前必须读到最新清单：走 raw 会读到过期副本，写回时丢掉别人刚加的条目
-  let existing: Record<string, string> = {}
-  try {
-    const text = await readWorkFile(wrapper, SOURCE_TIMES_PATH)
-    if (text) existing = JSON.parse(text)
-  } catch {
-    // 首次生成
-  }
-  const next = { ...existing }
-  for (const d of filled)
-    if (d.sourceCommitTime) next[d.title] = d.sourceCommitTime
-  const sorted = Object.fromEntries(
-    Object.entries(next).sort(([a], [b]) => a.localeCompare(b))
-  )
-  await pushContentToWorkPath(
-    wrapper,
-    SOURCE_TIMES_PATH,
-    utf8ToBase64(`${JSON.stringify(sorted, null, 2)}\n`),
-    '更新入库时间清单'
-  )
-  return Object.keys(sorted).length
-}
-
-export async function fillDocSourceCommitTimes(
-  wrapper: any,
-  docs: DocTask[]
-): Promise<DocTask[]> {
-  await loadSourceTimes()
-  const times = await Promise.all(
-    docs.map(async (d) => ({
-      number: d.number,
-      sourceCommitTime:
-        d.sourceCommitTime || (await docSourceCommitTime(wrapper, d)),
-    }))
-  )
-  const byNumber = new Map(times.map((t) => [t.number, t.sourceCommitTime]))
-  return docs
-    .map((d) => ({ ...d, sourceCommitTime: byNumber.get(d.number) || '' }))
-    .sort(sortBySourceCommitTime)
-}
-
-// 读工作仓库里的文本文件。一律走 API 直读并破代理缓存——
-// raw.githubusercontent 无视查询串，拿它取「要用的内容」会下到旧版本。
-// 只有入库时间清单仍走 raw：那是不变量，且一次要顶掉几百个请求。
-export async function readWorkFile(
-  wrapper: any,
-  path: string
-): Promise<string | null> {
-  try {
-    const file: any = await wrapper.getContent(
-      WORK_OWNER,
-      WORK_REPO,
-      WORK_BRANCH,
-      path,
-      true
-    )
-    return base64ToUtf8(file.content)
-  } catch {
-    return null
-  }
-}
-
-// 完成时间取"文件最后提交"与"记录时间戳"中较早的一个。
-// 两个来源各有失真：回填出来的文件提交时间偏晚，迁移过的记录时间戳也偏晚；
-// 但完成不可能晚于最早的那份证据，取较早的能同时躲开两种情况。
-// 按时刻比较：记录里有 33 条是 +08:00 带微秒的格式，字符串比较会把它判成更晚
-function earlier(a: string, b: string): string {
-  if (!a || !b) return a || b
-  const ta = Date.parse(a)
-  const tb = Date.parse(b)
-  if (Number.isNaN(ta)) return b
-  if (Number.isNaN(tb)) return a
-  return ta <= tb ? a : b
-}
-
-export async function fillDocStageCommitTimes(
-  wrapper: any,
-  docs: DocTask[]
-): Promise<DocTask[]> {
-  const times = await Promise.all(
-    docs.map(async (d) => {
-      const done = d.tr.state === '完成' || d.pr.state === '完成'
-      const [recordText, trFile, prFile] = await Promise.all([
-        done ? readWorkFile(wrapper, `records/${d.title}.json`) : null,
-        d.tr.state === '完成' ? fileCommitTime(wrapper, d.translatedPath) : '',
-        d.pr.state === '完成' ? fileCommitTime(wrapper, d.proofreadPath) : '',
-      ])
-      let record: any = null
-      try {
-        record = recordText ? JSON.parse(recordText) : null
-      } catch {
-        record = null
-      }
-      return {
-        number: d.number,
-        trCsvTime:
-          d.tr.state === '完成'
-            ? earlier(trFile, record?.translation?.timestamp || '')
-            : '',
-        prCsvTime:
-          d.pr.state === '完成'
-            ? earlier(prFile, record?.proofread?.timestamp || '')
-            : '',
-      }
-    })
-  )
-  const byNumber = new Map(times.map((t) => [t.number, t]))
-  return docs.map((d) => ({ ...d, ...byNumber.get(d.number) }))
-}
-
-// 校对者直接采用 AI 机翻稿：
-// 1) 把 ai_csv 内容原样复制为 translated_csv 快照
-// 2) 翻译轨置 完成，译者=校对者（不保留 AI 署名）
-export async function aiCompleteTranslation(
-  wrapper: any,
-  doc: { number: number; aiPath: string; translatedPath: string },
-  me: string,
-  displayName = ''
-): Promise<void> {
-  const issue = await wrapper.getIssue(WORK_OWNER, WORK_REPO, doc.number)
-  const tr = parseTrack(issue.body, 'tr')
-  const pr = parseTrack(issue.body, 'pr')
-  if (tr.user || tr.state !== '待认领' || !sameWorkUser(pr.user, me)) {
-    throw new Error(
-      '只有已认领校对、且翻译无人认领时，校对本人才能采用 AI 机翻稿'
-    )
-  }
-  const src = await wrapper.getContent(
-    WORK_OWNER,
-    WORK_REPO,
-    WORK_BRANCH,
-    doc.aiPath,
-    true
-  )
-  const b64 = stampTranslator(src.content as string, displayName)
-  await wrapper.updateContent(
-    WORK_OWNER,
-    WORK_REPO,
-    WORK_BRANCH,
-    doc.translatedPath,
-    `一键完成翻译(AI) ${doc.translatedPath}`,
-    b64
-  )
-  await updateWorkRecord(
-    wrapper,
-    doc.translatedPath
-      .replace(/^translated_csv\//, '')
-      .replace(/\.csv$/, '')
-      .split('/')
-      .join('_'),
-    'tr',
-    me,
-    doc.translatedPath,
-    '完成',
-    true
-  )
-  const body = setTrackInBody(issue.body, 'tr', {
-    user: me,
-    state: '完成',
-  })
-  await wrapper.updateIssue(WORK_OWNER, WORK_REPO, doc.number, { body })
-}
-
-// GMT+8 显示，如 07-08 23:45
-export function formatGmt8(iso: string): string {
-  if (!iso) return ''
-  return new Date(iso).toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
 }
 
 function markerRe(key: TrackKey) {
@@ -493,29 +151,6 @@ function stagePathFromAny(path: string, title: string, dir: string): string {
   return csvPathFromTitle(title, dir)
 }
 
-export function stagePath(
-  d: DocTask,
-  stage: 'ai' | 'translated' | 'proofread'
-) {
-  if (stage === 'ai') return d.aiPath
-  if (stage === 'translated') return d.translatedPath
-  return d.proofreadPath
-}
-
-export function stagePathForTitle(
-  title: string,
-  stage: 'ai' | 'translated' | 'proofread'
-) {
-  return csvPathFromTitle(
-    title,
-    stage === 'ai'
-      ? 'ai_csv'
-      : stage === 'translated'
-      ? 'translated_csv'
-      : 'proofread_csv'
-  )
-}
-
 // 成品 CSV 的署名行改写（进出都是 base64）；translator 传展示用的个人 ID
 export function stampTranslator(b64: string, translator: string): string {
   if (!translator) return b64
@@ -553,29 +188,6 @@ export function assigneesOf(tr: Track, pr: Track): string[] {
   ]
 }
 
-export function editorUrlForPath(
-  path: string,
-  issue?: number,
-  role?: TrackKey
-): string {
-  const blob = `https://github.com/${WORK_OWNER}/${WORK_REPO}/blob/${WORK_BRANCH}/${path}`
-  const q = issue ? `&issue=${issue}` : ''
-  const r = role ? `&role=${role}` : ''
-  // forceReload：keep-alive 的编辑器靠此 query 触发重新加载
-  return `/translate?source=remote&forceReload=1${q}${r}#${blob}`
-}
-
-// 把内容直推回它被读取的源路径（同 owner/repo/branch/path），返回 commit 结果
-export async function pushContentToSource(
-  wrapper: any,
-  sourceUrl: string,
-  base64: string,
-  message: string
-) {
-  const { owner, repo, branch, path } = parseGithubBlobUrl(sourceUrl)
-  return wrapper.updateContent(owner, repo, branch, path, message, base64)
-}
-
 // 多文件一次提交到工作仓库；内容传 base64
 export async function commitWorkFiles(
   wrapper: any,
@@ -583,22 +195,6 @@ export async function commitWorkFiles(
   message: string
 ): Promise<string> {
   return wrapper.commitFiles(WORK_OWNER, WORK_REPO, WORK_BRANCH, message, files)
-}
-
-export async function pushContentToWorkPath(
-  wrapper: any,
-  path: string,
-  base64: string,
-  message: string
-) {
-  return wrapper.updateContent(
-    WORK_OWNER,
-    WORK_REPO,
-    WORK_BRANCH,
-    path,
-    message,
-    base64
-  )
 }
 
 // ===== 网页端产物下载：成品 CSV / 纯中文 txt =====
@@ -609,7 +205,9 @@ const preDirMatch = (
 ).match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)/)
 const DICT_URL = preDirMatch
   ? `https://raw.githubusercontent.com/${preDirMatch[1]}/${preDirMatch[2]}/${preDirMatch[3]}/name_dictionary.json`
-  : ''
+  : 'https://raw.githubusercontent.com/chihya72/Gakumas-Auto-Translate/master/name_dictionary.json'
+
+let nameDictionary: { promise: Promise<Record<string, string>>; expires: number } | undefined
 
 export function workRawUrl(relPath: string, version = ''): string {
   const query = version ? `?v=${encodeURIComponent(version)}` : ''
@@ -805,41 +403,6 @@ export function applyRecordTrack(
     delete record.direct_machine_proofread
   }
   record.github = { ...(record.github || {}), updated_at: now }
-  return directProofread
-}
-
-export async function updateWorkRecord(
-  wrapper: any,
-  fileId: string,
-  role: TrackKey,
-  operatorGithub: string,
-  artifactPath = '',
-  state: TrackState = '完成',
-  directMachine = false
-): Promise<boolean> {
-  const recordPath = `records/${fileId}.json`
-  const { operatorQq, operatorId } = await resolveOperator(
-    wrapper,
-    operatorGithub
-  )
-  const record = await fetchRecordForWrite(wrapper, fileId)
-  const directProofread = applyRecordTrack(record, {
-    role,
-    state,
-    artifactPath,
-    directMachine,
-    operatorQq,
-    operatorGithub,
-    operatorId,
-  })
-  await wrapper.updateContent(
-    WORK_OWNER,
-    WORK_REPO,
-    WORK_BRANCH,
-    recordPath,
-    `${TRACK_LABEL[role]}${state}记录 ${fileId}`,
-    utf8ToBase64(JSON.stringify(record, null, 2) + '\n')
-  )
   return directProofread
 }
 
@@ -1186,31 +749,31 @@ export function buildChineseTxt(
 ): string {
   const rowErrors = validateRowsHtmlTags(rows)
   if (rowErrors.length) throw new Error(rowErrors.slice(0, 5).join('\n'))
-  let content = mergeScriptText(rawTxt, rows)
-  // 完整读取 name 属性后一次查表，不依赖 CSV 行顺序，也不重复翻译替换结果。
-  content = content.replace(
-    /(^|\s)(name=[ \t]*)([^\s\]]+)/g,
-    (_match, space: string, prefix: string, name: string) => {
-      const translated = Object.prototype.hasOwnProperty.call(nameDict, name)
-        ? nameDict[name]
-        : name
-      return space + prefix + (translated || name)
-    }
-  )
+  const content = mergeScriptText(rawTxt, rows, nameDict)
   const textErrors = validateTextHtmlTags(rawTxt, content)
   if (textErrors.length) throw new Error(textErrors.join('\n'))
   return content
 }
 
 export async function fetchNameDict(): Promise<Record<string, string>> {
-  if (!DICT_URL) return {}
-  try {
-    const r = await fetch(`${DICT_URL}?t=${Date.now()}`)
-    if (!r.ok) return {}
-    return await r.json()
-  } catch {
-    return {}
+  if (!nameDictionary || nameDictionary.expires <= Date.now()) {
+    const promise = (async () => {
+      try {
+        const r = await fetch(DICT_URL, { signal: AbortSignal.timeout(15000), credentials: 'omit' })
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        const data: unknown = await r.json()
+        if (!data || typeof data !== 'object' || Array.isArray(data) ||
+            Object.values(data).some(value => typeof value !== 'string')) throw new Error('字典格式无效')
+        return data as Record<string, string>
+      } catch {
+        throw new Error('人名字典加载失败，请稍后重试 TXT 导出')
+      }
+    })()
+    nameDictionary = { promise, expires: Date.now() + 5 * 60 * 1000 }
+    // Concurrent/batch exports share one request; a failed download can be retried.
+    void promise.catch(() => { if (nameDictionary?.promise === promise) nameDictionary = undefined })
   }
+  return nameDictionary.promise
 }
 
 // 我在本篇的当前状态：担任哪一轨、是否被"翻译未完成"挡住校对编辑
@@ -1294,145 +857,6 @@ export function docFromIssue(i: any): DocTask {
     createdAt: i.created_at || '',
     updatedAt: i.updated_at || '',
   }
-}
-
-export function issueLabelNames(i: any): string[] {
-  return (i.labels || []).map((l: any) => (typeof l === 'string' ? l : l.name))
-}
-
-export function isArchivedIssue(i: any): boolean {
-  return issueLabelNames(i).includes(ARCHIVED_LABEL)
-}
-
-export async function archiveIssue(wrapper: any, issueNumber: number) {
-  const issue = await wrapper.getIssue(WORK_OWNER, WORK_REPO, issueNumber)
-  const labels = [...new Set([...issueLabelNames(issue), ARCHIVED_LABEL])]
-  await wrapper.updateIssue(WORK_OWNER, WORK_REPO, issueNumber, {
-    labels,
-    state: 'closed',
-  })
-}
-
-// 恢复后归位由两轨状态决定：全完成 → 关闭（已完成历史），否则打开（工作台）
-export async function restoreIssue(wrapper: any, issueNumber: number) {
-  const issue = await wrapper.getIssue(WORK_OWNER, WORK_REPO, issueNumber)
-  const labels = issueLabelNames(issue).filter((l) => l !== ARCHIVED_LABEL)
-  const done =
-    parseTrack(issue.body, 'tr').state === '完成' &&
-    parseTrack(issue.body, 'pr').state === '完成'
-  await wrapper.updateIssue(WORK_OWNER, WORK_REPO, issueNumber, {
-    labels,
-    state: done ? 'closed' : 'open',
-  })
-}
-
-export async function createWorkIssue(
-  wrapper: any,
-  title: string,
-  stage: 'ai' | 'translated' | 'proofread',
-  owner = ''
-) {
-  const aiPath = stagePathForTitle(title, 'ai')
-  const translatedPath = stagePathForTitle(title, 'translated')
-  const proofreadPath = stagePathForTitle(title, 'proofread')
-  const tr: Track = {
-    user: stage === 'ai' ? '' : owner,
-    state: stage === 'ai' ? '待认领' : '完成',
-  }
-  const pr: Track = {
-    user: stage === 'proofread' ? owner : '',
-    state: stage === 'proofread' ? '完成' : '待认领',
-  }
-  const body = [
-    `<!-- raw_path: raw_txt/${title}.txt -->`,
-    `<!-- ai_path: ${aiPath} -->`,
-    `<!-- translated_path: ${translatedPath} -->`,
-    `<!-- proofread_path: ${proofreadPath} -->`,
-    setTrackInBody('', 'tr', tr),
-    setTrackInBody('', 'pr', pr),
-  ].join('\n')
-  const { data: issue } = await wrapper.request(
-    'POST /repos/{owner}/{repo}/issues',
-    {
-      owner: WORK_OWNER,
-      repo: WORK_REPO,
-      title,
-      body,
-      assignees: assigneesOf(tr, pr),
-      headers: wrapper.headers,
-    }
-  )
-  if (stage === 'proofread') {
-    await wrapper.updateIssue(WORK_OWNER, WORK_REPO, issue.number, {
-      state: 'closed',
-    })
-  }
-  // 入库时间只在新增文件时才需要补：它是原文首次提交时间，翻译校对不会改变它
-  try {
-    await saveSourceTimes(wrapper, [docFromIssue(issue)])
-  } catch {
-    // 清单写入失败不影响建单；读取端缺项会自动回退逐个查
-  }
-  return issue
-}
-
-// 改译者时同步成品 CSV 的署名行；文件不存在或内容没变就跳过，不产生空提交
-export async function restampTranslator(
-  wrapper: any,
-  doc: Pick<DocTask, 'title' | 'translatedPath' | 'proofreadPath'>,
-  translator: string
-): Promise<number> {
-  let changed = 0
-  for (const path of [doc.translatedPath, doc.proofreadPath]) {
-    if (!path) continue
-    try {
-      const file = await wrapper.getContent(
-        WORK_OWNER,
-        WORK_REPO,
-        WORK_BRANCH,
-        path,
-        true
-      )
-      const current = (file.content as string).replace(/\n/g, '')
-      const next = stampTranslator(current, translator)
-      if (next === current) continue
-      await wrapper.updateContent(
-        WORK_OWNER,
-        WORK_REPO,
-        WORK_BRANCH,
-        path,
-        `更新译者署名 ${doc.title}`,
-        next
-      )
-      changed += 1
-    } catch {
-      // 该阶段成品还不存在，跳过
-    }
-  }
-  return changed
-}
-
-export async function updateTracks(
-  wrapper: any,
-  issueNumber: number,
-  tr: Track,
-  pr: Track,
-  translator = ''
-) {
-  const issue = await wrapper.getIssue(WORK_OWNER, WORK_REPO, issueNumber)
-  const before = parseTrack(issue.body, 'tr').user
-  let body = setTrackInBody(issue.body, 'tr', tr)
-  body = setTrackInBody(body, 'pr', pr)
-  const done = tr.state === '完成' && pr.state === '完成'
-  const archived = issueLabelNames(issue).includes(ARCHIVED_LABEL)
-  await wrapper.updateIssue(WORK_OWNER, WORK_REPO, issueNumber, {
-    body,
-    assignees: assigneesOf(tr, pr),
-    state: archived ? issue.state : done ? 'closed' : 'open',
-  })
-  // 译者换人了才回写成品署名行
-  if (translator && tr.user !== before)
-    await restampTranslator(wrapper, docFromIssue(issue), translator)
 }
 
 // 统一的轨道更新：拉最新 body → 改指定轨 → 回写 body + 同步 assignees（两轨全完成则关 issue）

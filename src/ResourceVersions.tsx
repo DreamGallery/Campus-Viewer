@@ -8,6 +8,7 @@ export default function ResourceVersions({ revision }: { revision?: string | num
   const [error, setError] = useState(false);
   const [open, setOpen] = useState(false);
   useEffect(() => {
+    if (!open) return;
     const controller = new AbortController();
     fetch('/api/resources/versions', { signal: controller.signal }).then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(value => { setData(value); setError(false); }).catch(e => { if (e.name !== 'AbortError') setError(true); });
     return () => controller.abort();

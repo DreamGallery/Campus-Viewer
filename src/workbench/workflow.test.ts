@@ -3,9 +3,19 @@ import { docFromIssue, setAssigneeUsers } from './upstream/workflow';
 import { csvText, editorText, lineLengths, longLines, insertFormat } from './text-format';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Github } from './github';
 import { extractInfoFromCsvText, toCsvText, mergeTranslation, setCsvTranslator } from './upstream/csv';
+import { chapterVoiceMap } from './voice-map';
 import { completionPath, myStatusOf, validateRowsHtmlTags, saveDraft, completeStage, StaleRevisionError } from './upstream/workflow';
 const csv='id,name,text,trans,extra\r\n000,A,"one,\ntwo",,keep\r\n000,A,second,,keep2\r\ninfo,test.txt,,,metadata\r\n译者,old,,,';
+test('voice mapping follows CSV record positions and rejects stale or mismatched audio', () => {
+ const source = extractInfoFromCsvText('id,name,text,trans\ninfo,test.txt,,\n000,A,same,\n000,A,same,\n译者,author,,');
+ const line = {record_index: 3, text: 'same', speaker: 'A', clips: [{url: '/audio/second.flac', label: 'voice'}]};
+ const voices = {source_sha256: 'source', lines: [line, {...line, record_index: 1}, {...line, record_index: 99}, {...line, record_index: 2, speaker: 'other'}]};
+ assert.deepEqual([...chapterVoiceMap(source, 'source', voices)], [[1, line]]);
+ assert.equal(chapterVoiceMap(source, 'updated', voices).size, 0);
+ assert.equal(chapterVoiceMap(null, 'source', voices).size, 0);
+});
 test('CSV round trip preserves duplicate IDs, multiline cells and metadata without mutation',()=>{const d=extractInfoFromCsvText(csv);d.data[0].trans='中,文\n"引号"';const copy=JSON.stringify(d);const out=extractInfoFromCsvText(toCsvText(d));assert.equal(out.data.length,2);assert.equal(out.data[0].trans,'中,文\\n"引号"');assert.equal(out.records[2].extra,'metadata');assert.equal(JSON.stringify(d),copy);});
 test('translation import rejects reordered duplicate IDs',()=>{const d=extractInfoFromCsvText(csv);const swapped={...d,data:[d.data[1],d.data[0]]}; const wrong=toCsvText(d).replace('second','changed');assert.throws(()=>mergeTranslation(d,wrong),/不一致/);assert.equal(swapped.data[0].id,swapped.data[1].id);});
 test('translator with commas and newline is escaped correctly',()=>{assert.equal(extractInfoFromCsvText(setCsvTranslator(csv,'a,\nb')).translator,'a,\nb');});
@@ -53,10 +63,23 @@ test('batch claim rechecks the latest track and never reopens a completed or own
  }
 });
 test('batch claim preserves the other workflow track',async()=>{
- let update:any;
- const w={getIssue:async()=>({body:'<!-- tr::待认领 -->\n<!-- pr:reviewer:进行中 -->'}),updateIssue:async(_o:string,_r:string,_n:number,p:any)=>{update=p;}};
+ let update={body:'',state:''};
+ const w={getIssue:async()=>({body:'<!-- tr::待认领 -->\n<!-- pr:reviewer:进行中 -->'}),updateIssue:async(_o:string,_r:string,_n:number,p:typeof update)=>{update=p;}};
  await applyTrack(w,1,'tr',{user:'me',state:'进行中'},true);
  assert.match(update.body,/tr:me:进行中/);assert.match(update.body,/pr:reviewer:进行中/);assert.equal(update.state,'open');
+});
+
+test('GitHub adapter authenticates content and issue reads with the current CSRF token',async t=>{
+ const kinds:string[]=[];
+ t.mock.method(globalThis,'fetch',async(url:string,options:RequestInit)=>{
+  assert.equal(url,'/api/github/read');assert.equal(options.method,'POST');
+  assert.equal(new Headers(options.headers).get('X-CSRF-Token'),'csrf-current');
+  const input=JSON.parse(String(options.body));kinds.push(input.kind);
+  return Response.json(input.kind==='content'?{sha:'file-sha',content:'e30='}:{number:1,title:'story',body:'',updated_at:'now'});
+ });
+ const w=new Github({canCollaborate:true,configured:true,user:{login:'writer',name:'Writer'},csrf:'csrf-current',work:{owner:'owner',repo:'work',branch:'main'}});
+ await w.getContent('owner','work','main','users.json');await w.getIssue('owner','work',1);
+ assert.deepEqual(kinds,['content','issue']);assert.equal(w.baseline.get('users.json'),'file-sha');assert.equal(w.issues.get(1)?.title,'story');
 });
 
 import { completionTranslator } from './upstream/workflow';

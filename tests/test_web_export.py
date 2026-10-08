@@ -124,8 +124,52 @@ class WebExportTests(unittest.TestCase):
 
     def test_event_banner_ratio_excludes_other_banner_types(self):
         self.assertEqual(display_size('img_general_event_story_event-story-001-banner', (1024, 256)), (1024, 341))
+        self.assertEqual(display_size('img_general_event_4am_hski-banner-01', (1024, 256)), (1024, 341))
         for suffix in ['story-banner', 'reward-banner', 'rev-banner']:
             self.assertIsNone(display_size('img_general_event_test-' + suffix, (512, 128)))
+            self.assertIsNone(display_size('img_general_event_test-' + suffix + '-01', (512, 128)))
+
+    def test_numbered_campaign_cover_uses_linked_header_and_preserves_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, args = self.fixture(directory)
+            catalog = json.loads((root/'catalog.json').read_text())
+            sid = 'Story:story-other-01_hski-01'
+            gid = 'StoryGroup:story-hski-group-2026-1009'
+            banner = 'img_general_event_4am_hski-story-banner-01'
+            header = 'img_general_event_4am_hski-story-header-01'
+            catalog['categories'] = [{'id': 'event', 'name': '活动剧情', 'parent_id': None},
+                {'id': 'event.campaign', 'name': '限时企划剧情', 'parent_id': 'event'}]
+            catalog['groups'] = [{'id': gid, 'source_record_id': gid, 'kind': 'story_group',
+                'title': '朝の4時よ！一緒に走りにいきましょう！', 'order': 33, 'image_asset_id': banner}]
+            catalog['source_records'] = [{'id': gid, 'data': {'headerAssetId': header}},
+                {'id': sid, 'data': {'type': 'StoryType_AprilFool'}}]
+            for entry in catalog['entries']:
+                entry.update(group_ids=[gid], source_record_id=sid, category_id='event.campaign')
+            catalog['scripts'][0]['metadata_status'] = 'referenced'
+            planned = image_requests(catalog)
+            self.assertIn(header, planned)
+            self.assertIn(banner, planned)
+            self.assertIn('img_general_event_4am_hski-banner-01', planned)
+            self.assertNotIn('img_general_event_4am_hski-banner-02', planned)
+            atomic_write(root/'catalog.json', catalog)
+            atomic_write(root/'voices.json', {'sources': {'catalog_sha256': hashlib.sha256((root/'catalog.json').read_bytes()).hexdigest()}, 'scripts': []})
+            small = {'name': banner, 'path': 'images/small.webp', 'width': 512, 'height': 128}
+            large = {'name': header, 'path': 'images/header.webp', 'width': 1600, 'height': 900}
+            for images, expected, ratio in [([small, large], 'header', 16/9), ([small], 'small', 4)]:
+                atomic_write(root/'assets.json', {'images': images})
+                result = build(*args)
+                folder = root/'output/builds'/result['build_id']
+                updates = json.loads((folder/'updates.json').read_text())
+                chapter = json.loads((folder/'chapters/adv_test.json').read_text())
+                entry = json.loads((folder/'lists/event.json').read_text())[0]
+                self.assertEqual(updates['pending_count'], 0)
+                self.assertFalse(chapter['metadata_pending'])
+                self.assertEqual(updates['items'][0]['category_id'], 'event.campaign')
+                self.assertEqual(entry['group_images'], updates['items'][0]['images'])
+                self.assertEqual(entry['group_images'], chapter['group_images'])
+                self.assertEqual(entry['group_images'][0]['url'], f'/assets/images/{expected}.webp')
+                self.assertEqual(entry['group_images'][0]['aspect_ratio'], ratio)
+                self.assertEqual(bool(entry['group_images'][0]['preview_crop']), expected == 'header')
 
     def test_event_replay_superset_wins_without_title_merging(self):
         groups = {key: {'kind': 'story_group'} for key in ('live', 'replay', 'distinct')}
@@ -294,7 +338,7 @@ class ReleaseTimeTests(unittest.TestCase):
     def test_text_dates_use_pinned_revision(self):
         import os
         import subprocess
-        from campus_story_index.web_export import text_update_times, text_changes
+        from campus_story_index.web_export import text_history
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             def git(*args, **kwargs):
@@ -309,16 +353,23 @@ class ReleaseTimeTests(unittest.TestCase):
             env = {**os.environ, 'GIT_AUTHOR_DATE': '2024-05-16T00:00:00+00:00', 'GIT_COMMITTER_DATE': '2024-05-16T00:00:00+00:00'}
             git('commit', '-qm', 'first', env=env)
             revision = git('rev-parse', 'HEAD')
-            first = text_update_times(root, revision)
-            self.assertEqual(text_changes(root, revision)['CSV/adv_sample.csv']['kind'], 'added')
+            first, original_changes = text_history(root, revision)
+            self.assertEqual(original_changes['CSV/adv_sample.csv']['kind'], 'added')
             file.write_text('translation update')
             git('add', 'CSV')
             env.update(GIT_AUTHOR_DATE='2025-05-16T00:00:00+00:00', GIT_COMMITTER_DATE='2025-05-16T00:00:00+00:00')
             git('commit', '-qm', 'second', env=env)
-            self.assertEqual(text_update_times(root, revision), first)
-            self.assertEqual(text_changes(root, 'HEAD')['CSV/adv_sample.csv']['kind'], 'modified')
-            self.assertEqual(text_changes(root, revision)['CSV/adv_sample.csv']['kind'], 'added')
-            self.assertGreater(text_update_times(root, 'HEAD')['CSV/adv_sample.csv'], first['CSV/adv_sample.csv'])
-            self.assertEqual(text_update_times(None, revision), {})
+            self.assertEqual(text_history(root, revision), (first, original_changes))
+            dates, changes = text_history(root, 'HEAD')
+            self.assertEqual(changes['CSV/adv_sample.csv']['kind'], 'modified')
+            self.assertGreater(dates['CSV/adv_sample.csv'], first['CSV/adv_sample.csv'])
+            self.assertEqual(text_history(None, revision), ({}, {}))
+            git('mv', 'CSV/adv_sample.csv', 'CSV/renamed.csv')
+            env.update(GIT_AUTHOR_DATE='2026-05-16T00:00:00+00:00', GIT_COMMITTER_DATE='2026-05-16T00:00:00+00:00')
+            git('commit', '-qm', 'rename', env=env)
+            renamed_dates, renamed = text_history(root, 'HEAD')
+            self.assertEqual(renamed['CSV/renamed.csv']['kind'], 'added')
+            self.assertGreater(renamed_dates['CSV/renamed.csv'], dates['CSV/adv_sample.csv'])
+            self.assertEqual(renamed['CSV/adv_sample.csv'], changes['CSV/adv_sample.csv'])
 
 if __name__ == '__main__': unittest.main()

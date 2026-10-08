@@ -1,16 +1,16 @@
 # 剧情语音与 CSV 对应索引 v1
 
-这一步生成可供翻译网站使用的离线数据，不修改原 CSV。剧情分类继续使用 v2 目录：主线、角色、辅助卡、活动、其他。
+语音索引为网站提供逐句音频关联，不修改原 CSV。剧情分类使用 v2 目录：主线、角色、辅助卡、活动、其他。
 
 ## 数据链路
 
 `story-index.json → script_id → 原始 ADV + CSV → voice_events → 音频包内部 cue → FLAC / MP3 / AAC（由初始化配置决定）`
 
-CSV 的 `id` 大量重复，不能用作逐句关联键。原始 ADV 来自 Campus-adv-txts 的 `Resource/adv_*.txt`。音频获取复用了用户 HatsuboshiWebsite 中的 Octo 请求/解密及 vgmstream 解包思路，重新实现了下载、校验、缓存和关联逻辑。`vendor/octodb.proto` 与生成的 Python 协议代码来自用户提供的 HatsuboshiToolkit；不是重新设计的协议。
+CSV 的 `id` 大量重复，不能用作逐句关联键。原始 ADV 来自 Campus-adv-txts 的 `Resource/adv_*.txt`。资源请求与解密流程参考 HatsuboshiWebsite，音频解码使用 vgmstream。`vendor/octodb.proto` 与生成的 Python 协议代码来自 HatsuboshiToolkit。
 
 ## 运行
 
-在项目根目录执行。Python 环境实际验证版本为 3.14；本地编译解码器需要 Git、CMake 和 C/C++ 编译器。
+在项目根目录执行；需要 FFmpeg，本地编译解码器还需要 Git、CMake 和 C/C++ 编译器。
 
 ```bash
 .venv/bin/pip install -r requirements-audio.txt
@@ -33,9 +33,9 @@ sh scripts/build_vgmstream.sh
 
 初次使用先按 README 生成剧情目录。更新 CSV/masterdata 后也需要先重建该目录，再刷新下载计划、解包并构建语音索引；构建器拒绝混用不同输入快照。可用 `--plan-only` 只生成下载计划；已有清单时可省略 `--refresh-manifest` 和配置参数。也可通过 `--config` 指定兼容的配置文件。
 
-配置仅用于资源请求，不写入索引或日志。执行范围只有本地资源获取和处理，不执行原网站的上传步骤。同步源 Git 仓库需单独执行，生成器不会自行 pull。
+配置仅用于资源请求，不写入索引或日志。这些命令在本地下载和处理资源，R2 发布由 Docker 更新流程负责。同步源 Git 仓库需单独执行，生成器不会自行 pull。
 
-解码器脚本固定 vgmstream 源码提交 `764c84c5048932054356f2ea67a71ea7673abc83`，本地编译 HCA 所需功能，不安装全局程序。命令参数可参考 [vgmstream 官方使用说明](https://github.com/vgmstream/vgmstream/blob/master/doc/USAGE.md)。当前构建关闭了多种外部编解码器；以后遇到其他音频编码应重新评估编译配置。
+解码器脚本固定 vgmstream 源码提交 `764c84c5048932054356f2ea67a71ea7673abc83`，按 HCA 音频需求配置，不安装全局程序。命令参数可参考 [vgmstream 官方使用说明](https://github.com/vgmstream/vgmstream/blob/master/doc/USAGE.md)。其他音频编码可能需要调整编译选项。
 
 ## 产物与路径
 
@@ -53,7 +53,7 @@ sh scripts/build_vgmstream.sh
 
 分片路径相对于 `generated/voice-index/`；`audio_path` 相对于 `data/audio/`；CSV 路径相对于 Campus-Story 根目录；ADV 路径相对于 Resource。前端通过 `script_id` 查找分片，后端为 `audio_path` 提供媒体 URL，不应在每次打开页面时加载全部索引。
 
-索引按输入和代码哈希创建不可变构建目录，成功后原子切换 manifest。音频缓存路径仍按包名组织，未来更新同名资源时可能替换文件；部署时应让索引与音频目录作为同一批快照发布，不能把旧索引任意指向新缓存。
+索引按输入和代码哈希创建不可变构建目录，成功后原子切换 manifest。音频缓存按包名组织，同名资源更新可能替换文件；索引与音频目录应作为同一批快照发布。
 
 ## 逐句与语音字段
 
@@ -78,7 +78,7 @@ sh scripts/build_vgmstream.sh
 5. `{voice_asset_id}`、`{voice_asset_id_01}`、`{voice_asset_id_02}` 分别由 masterdata 的 `voiceAssetId`、`voiceAssetId1`、`voiceAssetId2` 按入口上下文解析。同一脚本可有多种角色语音，网站应先选择剧情入口上下文，再展示适用变体。
 6. 同时索引专用剧情音频、通用角色反应音及动态语音。选项没有自动语音关联；`no_explicit_voice` 只表示当前解析范围内没有直接关联，不表示游戏中一定无声。嵌入时间轴内容尚未展开。
 
-## 下载与解包改进
+## 下载与解包规则
 
 - 按实际语音引用生成计划，包含通用反应音和动态变体。
 - 下载流式写临时文件，大小和 MD5 通过后发布；有超时、有限重试和并发上限。重复执行复用完整且校验通过的文件，不支持单文件 HTTP 分段续传。

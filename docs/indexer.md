@@ -36,12 +36,14 @@ python3 -m venv .venv
 
 分类 ID 为稳定的英文机器值，中文名称在 `taxonomy.py` 中配置。角色身份、卡牌、培养模式和活动分组作为关系字段，避免形成多份互相不一致的树。某些分类当前没有条目，保留作稳定接口。
 
+游戏的 `StoryType_AprilFool` 也用于普通限时企划。只有剧情、分组或关联封面明确带有 `aprilfool` 标识时归入愚人节，其余归入限时企划；是否待补全资料取决于 masterdata 关联，而非活动是否已经开放。
+
 主线活动的分组如果是唯一一个主线章节的剧情 ID 子集，会归入该章，标注 `parent_basis=story_id_subset`；原活动入口仍通过 memberships 保留，不根据名称猜章节。
 
 ## 统一数据结构
 
 - **entries**：剧情入口。一条源记录的一个脚本字段对应一个入口；保存标题、分类、条件和上下文。
-- **scripts**：脚本资源，按 asset ID 去重。CSV 路径、提取状态、原文哈希属于这一层，可供以后共用翻译。
+- **scripts**：脚本资源，按 asset ID 去重。同一脚本的多个入口共用 CSV 路径、提取状态和原文哈希。
 - **groups / memberships**：章节、卡牌、活动、培养模式等分组及有序关系。同一入口可以属于多个组。
 - **characters**：角色/说话人资料，包含不可培养角色，以及只出现在 CharacterAdv 的对象。
 - **source_records / condition_sets / sources**：源记录、未求值的条件组、输入快照信息，便于排查与增量更新。
@@ -49,7 +51,7 @@ python3 -m venv .venv
 
 所有公开标准字段统一使用 `snake_case`，只有 `source_records.data`、`condition_sets` 保留原始 masterdata 名称，避免转换时丢失含义。字段细节见 [结构说明](index-v2.md)，机器契约见 [JSON Schema](story-index.schema.json)。
 
-这是服务端完整目录，含来源与运行时变体，当前格式化 JSON 约 33 MB。网页应由后端按分类/角色/卡牌筛选和分页，不应在首页一次下载完整文件。`script_count` 是资源数，`entry_count` 是含上下文变体的入口数；不能把后者当作独立剧情数量。
+完整目录包含来源与运行时变体；网页按需加载 `web_export` 生成的分类和章节分片。`script_count` 是资源数，`entry_count` 是含上下文变体的入口数；不能把后者当作独立剧情数量。
 
 ## 测试
 
@@ -63,11 +65,11 @@ python3 -m venv .venv
 
 ## 剧情语音与 CSV 对应索引
 
-已增加独立的资源下载、音频解包和逐句关联流程，沿用上述剧情目录的 `script_id`。从原始 ADV 脚本读取文本、分支、时间轴和语音引用，再核对音频包内部 cue 名称；不依赖 CSV 中重复的 `id` 或音频文件排序。
+语音索引沿用剧情目录的 `script_id`，从原始 ADV 脚本读取文本、分支、时间轴和语音引用，并核对音频包内部 cue 名称；不依赖 CSV 中重复的 `id` 或音频文件排序。
 
-当前产物入口为 `generated/voice-index/manifest.json`，按剧情加载分片；音频位于 `data/audio/clips/`。台词关联语音与时间段内的伴随语音分开保存，未能确定的对应关系保留诊断。
+索引入口为 `generated/voice-index/manifest.json`，按剧情加载分片；音频位于 `data/audio/clips/`。台词关联语音与时间段内的伴随语音分开保存，未能确定的对应关系保留诊断。
 
-安装额外依赖 `requirements-audio.txt` 后，按 [语音索引使用说明](voice-index.md) 运行。字段约束见 [分片 JSON Schema](voice-index.schema.json)。大体积音频、下载缓存、编译工具和生成索引均已加入 `.gitignore`。
+安装额外依赖 `requirements-audio.txt` 后，按 [语音索引使用说明](voice-index.md) 运行。字段约束见 [分片 JSON Schema](voice-index.schema.json)。`.gitignore` 排除音频、下载缓存、编译工具和生成索引。
 
 ## 网页接入
 

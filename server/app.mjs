@@ -7,6 +7,12 @@ import { pathToFileURL } from 'node:url';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const random = () => randomBytes(32).toString('base64url');
+const postLimits = new Map([
+  ['/api/auth/logout', 1024],
+  ['/api/github/read', 32 * 1024],
+  ['/api/github/issue', 512 * 1024],
+  ['/api/github/commit', 6 * 1024 * 1024],
+]);
 export function createApp(env = process.env, remoteFetch = fetch, services = {}) {
   const origin = new URL(env.CAMPUS_PUBLIC_ORIGIN || 'http://127.0.0.1:5173').origin;
   const owner = env.CAMPUS_WORK_OWNER || 'chihya72', repo = env.CAMPUS_WORK_REPO || 'gakumas-translation-work', branch = env.CAMPUS_WORK_BRANCH || 'main';
@@ -39,17 +45,23 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
   const writable = p => /^(records\/[\w-]+\.json|(?:translated_csv|proofread_csv|translated_draft|proofread_draft|translated_backup|proofread_backup)\/.+\.csv|proofread_txt\/[\w-]+\.txt)$/.test(p);
   async function content(session, path, ref = branch) { return gh(session, 'GET', `contents/${filePath(path)}?ref=${encodeURIComponent(ref)}`); }
   async function shaAt(session, path, ref) { try { return (await content(session, path, ref)).sha; } catch (e) { if (e.status === 404) return null; throw e; } }
-  async function localFile(root, relative) {
-    if (services.readFile) return services.readFile(root, relative);
+  async function localFile(root, relative, req) {
+    if (services.readFile) return services.readFile(root, relative, req);
     if (!root) throw fail(503, '未配置本地文本目录');
     const realRoot = await realpath(root), file = await realpath(resolve(realRoot, relative));
     if (!file.startsWith(realRoot + sep)) throw fail(403, '文件不在配置目录内');
     return readFile(file, 'utf8');
   }
-  async function bodyOf(req) {
+  async function bodyOf(req, limit) {
     let size = 0; const chunks = [];
-    for await (const chunk of req) { size += chunk.length; if (size > 6 * 1024 * 1024) throw fail(413, '请求过大'); chunks.push(chunk); }
-    try { return JSON.parse(Buffer.concat(chunks).toString()); } catch { throw fail(400, '无效 JSON'); }
+    // Keep the request alive long enough to send 413 instead of resetting the socket.
+    for await (const chunk of req.iterator({ destroyOnReturn: false })) {
+      size += chunk.length; if (size > limit) throw fail(413, '请求过大'); chunks.push(chunk);
+    }
+    let input;
+    try { input = JSON.parse(Buffer.concat(chunks).toString()); } catch { throw fail(400, '无效 JSON'); }
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw fail(400, '无效 JSON 对象');
+    return input;
   }
   return createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -59,15 +71,17 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
     try {
       clean(); const url = new URL(req.url, origin);
       if (await (services.resourceRequest || resourceRequest)(env, req, res, url)) return;
+      if (req.method === 'POST' && !postLimits.has(url.pathname)) throw fail(404, '接口不存在');
+      if (req.method === 'POST' && req.headers.origin !== origin) throw fail(403, '请求来源不匹配');
       if (url.pathname === '/api/health' && req.method === 'GET') return json({ ok: true });
       if (url.pathname === '/api/resources/status' && req.method === 'GET') {
-        if (services.status) return json(await services.status());
+        if (services.status) return json(await services.status(req));
         if (!env.CAMPUS_RUNTIME_ROOT) return json({ state: 'unmanaged' });
-        try { return json(JSON.parse(await localFile(env.CAMPUS_RUNTIME_ROOT, 'status.json'))); }
+        try { return json(JSON.parse(await localFile(env.CAMPUS_RUNTIME_ROOT, 'status.json', req))); }
         catch (e) { if (e.code === 'ENOENT') return json({ state: 'initializing', phase: '等待资源初始化' }); throw e; }
       }
       async function sourceRoots() {
-        if (services.sourceRoots) return services.sourceRoots();
+        if (services.sourceRoots) return services.sourceRoots(req);
         if (!env.CAMPUS_RUNTIME_ROOT) return { web: env.CAMPUS_WEB_DATA, story: env.CAMPUS_STORY_ROOT, adv: env.CAMPUS_ADV_ROOT };
         let release;
         try { release = await realpath(resolve(env.CAMPUS_RUNTIME_ROOT, 'current')); }
@@ -75,11 +89,18 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
         return { web: resolve(release, 'web'), story: resolve(release, 'story'), adv: resolve(release, 'adv') };
       }
       const cookies = Object.fromEntries((req.headers.cookie || '').split(';').map(x => x.trim().split('=')));
-      const candidate = await sessions.get(cookies[cookieName]);
-      const session = candidate?.expires > Date.now() ? candidate : undefined;
+      let session;
+      if (req.method === 'POST' || (url.pathname === '/api/auth/status' && req.method === 'GET')) {
+        const candidate = await sessions.get(cookies[cookieName]);
+        session = candidate?.expires > Date.now() ? candidate : undefined;
+      }
       if (url.pathname === '/api/auth/status' && req.method === 'GET') return json({ canCollaborate: await canCollaborate(session), configured, user: session?.user || null, csrf: session?.csrf || null, work: { owner, repo, branch } });
       if (url.pathname === '/api/auth/login' && req.method === 'GET') {
         if (!configured) throw fail(503, '请先配置 GitHub OAuth 应用');
+        if (services.allowLogin && !await services.allowLogin(req)) {
+          res.setHeader('Retry-After', '60');
+          throw fail(429, '登录请求过于频繁，请稍后重试');
+        }
         const state = random(), verifier = random();
         const requested = url.searchParams.get('returnTo') || '/idols';
         const returnTo = /^\/(?!\/)[a-zA-Z0-9_/?=&%.-]*$/.test(requested) ? requested : '/idols';
@@ -114,26 +135,29 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
       if (url.pathname.startsWith('/api/script/') && req.method === 'GET') {
         const id = decodeURIComponent(url.pathname.slice('/api/script/'.length));
         if (!/^[\w-]+$/.test(id)) throw fail(400, '无效章节');
-        try { return json({ txt: await localFile((await sourceRoots()).adv, `${id}.txt`) }); }
+        try { return json({ txt: await localFile((await sourceRoots()).adv, `${id}.txt`, req) }); }
         catch (e) { if (e.code === 'ENOENT') throw fail(404, '本地缺少此章节原始 TXT'); throw e; }
       }
       if (url.pathname.startsWith('/api/source/') && req.method === 'GET') {
         const id = decodeURIComponent(url.pathname.slice('/api/source/'.length));
         if (!/^[\w-]+$/.test(id)) throw fail(400, '无效章节');
         const roots = await sourceRoots();
-        const manifest = JSON.parse(await localFile(roots.web, 'catalog/manifest.json'));
-        const chapter = JSON.parse(await localFile(roots.web, `${manifest.base_path.replace(/^\//, '')}/chapters/${id}.json`));
+        const manifest = JSON.parse(await localFile(roots.web, 'catalog/manifest.json', req));
+        const chapter = JSON.parse(await localFile(roots.web, `${manifest.base_path.replace(/^\//, '')}/chapters/${id}.json`, req));
         if (!chapter.csv_path) throw fail(404, '本章节尚无 CSV');
-        const csv = await localFile(roots.story, chapter.csv_path);
+        const csv = await localFile(roots.story, chapter.csv_path, req);
         return json({ csv, sha256: createHash('sha256').update(csv).digest('hex'), scriptId: id });
       }
       if (req.method !== 'POST') throw fail(404, '接口不存在');
-      if (req.headers.origin !== origin) throw fail(403, '请求来源不匹配');
-      const input = await bodyOf(req);
       const requireAuth = () => { if (!session) throw fail(401, '请先登录 GitHub'); if (req.headers['x-csrf-token'] !== session.csrf) throw fail(403, '会话验证失败，请刷新页面'); };
-      if (url.pathname === '/api/auth/logout') { requireAuth(); await sessions.delete(cookies[cookieName]); res.setHeader('Set-Cookie', cookie(cookieName, '', 0)); return json({ ok: true }); }
+      requireAuth();
+      if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || '')) throw fail(415, '请使用 JSON 请求');
+      const limit = postLimits.get(url.pathname), length = req.headers['content-length'];
+      if (length !== undefined && (!/^\d+$/.test(length) || !Number.isSafeInteger(Number(length)) || Number(length) > limit)) throw fail(413, '请求过大');
+      if (url.pathname !== '/api/auth/logout') await requireCollaborator(session);
+      const input = await bodyOf(req, limit);
+      if (url.pathname === '/api/auth/logout') { await sessions.delete(cookies[cookieName]); res.setHeader('Set-Cookie', cookie(cookieName, '', 0)); return json({ ok: true }); }
       if (url.pathname === '/api/github/read') {
-        if (['findIssue', 'issue', 'issues'].includes(input.kind)) await requireCollaborator(session);
         if (input.kind === 'findIssue') {
           if (!/^[\w-]+$/.test(input.scriptId || '')) throw fail(400, '无效章节');
           const query = new URLSearchParams({ q: `repo:${owner}/${repo} is:issue in:title ${input.scriptId}`, per_page: '100' });
@@ -147,8 +171,6 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
         if (input.kind === 'issues') return json(await gh(session, 'GET', `issues?state=all&per_page=100&page=${Math.max(1, Math.min(1000, Number(input.page) || 1))}`));
         throw fail(400, '不支持的读取操作');
       }
-      requireAuth();
-      await requireCollaborator(session);
       if (url.pathname === '/api/github/issue') {
         if (!Number.isSafeInteger(input.number) || !input.expectedUpdatedAt) throw fail(400, '缺少任务版本');
         const current = await gh(session, 'GET', `issues/${input.number}`);
@@ -181,6 +203,8 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
       }
       throw fail(404, '接口不存在');
     } catch (error) {
+      if (error.status === 429) res.setHeader('Retry-After', '60');
+      if (req.method === 'POST' && !req.readableEnded) res.shouldKeepAlive = false;
       if (!error.status) console.error('Campus API failure', JSON.stringify({stage:authStage,type:error.name || 'Error'}));
       const status = error.status || (error.code === 'ENOENT' ? 404 : 500);
       json({ error: status === 500 ? '服务处理失败，请检查本地配置或稍后重试' : error.message }, status);

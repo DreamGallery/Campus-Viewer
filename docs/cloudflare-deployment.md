@@ -42,7 +42,7 @@ npm run build:cloudflare
 npx wrangler deploy --config wrangler.local.jsonc
 ```
 
-`SESSION_SECRET` 使用至少 32 字符的随机值，可用 `openssl rand -hex 32` 生成。更换它会使已有会话失效；正常重新部署保留 D1 会话。只有工作仓库有写权限的用户能查看与提交协作任务。
+`SESSION_SECRET` 使用至少 32 字符的随机值，可用 `openssl rand -hex 32` 生成。更换它会使已有会话失效；正常重新部署保留 D1 会话。游客可阅读原文、本地编辑及导入导出；工作仓库中的任务、译文、草稿和用户资料均要求登录并具有仓库写权限。协作请求在解析正文前验证会话、CSRF 和权限。
 
 `build:cloudflare` 只打包代码、字体与固定界面素材，并进行部署预检查；随后执行 `wrangler deploy` 才会上线。自定义网站域名在 Worker 的 Domains & Routes 中配置，并与 OAuth 回调和 `CAMPUS_PUBLIC_ORIGIN` 保持一致。
 
@@ -54,6 +54,19 @@ npx wrangler dev --config wrangler.local.jsonc --port 8788
 ```
 
 本地默认使用模拟 R2 / D1，无资源时显示等待初始化；OAuth 回调使用 `http://127.0.0.1:8788/api/auth/callback`。`.dev.vars` 不会自动同步为正式 Secret。
+
+## 限流与缓存
+
+`wrangler.local.jsonc` 使用模板中的两个 `ratelimits` 绑定，设置 `workers_dev: false`、`preview_urls: false`，通过自定义域名提供服务。限流命名空间 ID 在同一账号内应与其他应用区分。
+
+- `LOGIN_RATE_LIMITER`：每 IP 每分钟 10 次登录，超过后返回 429，不写入 D1。
+- `RESOURCE_MISS_LIMITER`：公开目录、原文 CSV / TXT、资源状态、媒体、歌单与下载接口每 IP 每分钟允许 300 次需要读取 R2 的请求；同一请求只计一次，全部命中缓存时不计数。
+
+这些限制使用 Workers 原生绑定，按 Cloudflare 节点近似计数；不是全局硬上限，共享出口的用户共用额度。阈值可在 `ratelimits[].simple` 中调整。可另外为 `/api/auth/login` 配置 Cloudflare 限流规则，在进入 Worker 前拦截请求；部署代码不会创建该规则。
+
+Worker 缓存带版本或内容哈希的完整资源（单个不超过 8 MiB），版本指针缓存 30 秒，不存在的资源缓存 15 秒。资源状态接口共享版本指针缓存，缓存失效后先检查限流，再读取 R2。普通 GET 直接读取 R2；覆盖全文件的音频请求可建立完整缓存，供后续分段播放复用。登录、会话和 GitHub 协作响应不进入公共缓存，较大的媒体和下载包使用流式传输。
+
+使用 R2 自定义域名直连的媒体不经过上述 Worker 缓存和限流，需在该域名单独设置缓存规则，覆盖带哈希的图片及音频路径（包括 FLAC），并忽略这些不可变资源的查询参数。不要将此规则扩展到版本指针、登录或协作接口。
 
 ## Docker 更新器
 

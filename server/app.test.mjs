@@ -107,3 +107,63 @@ test('resource archives expose only published downloads and support byte ranges'
  await rm(join(root,'downloads',filename));await symlink('/etc/hosts',join(root,'downloads',filename));
  assert.equal((await fetch(path)).status,403);
 });
+
+test('all work-repository reads require collaboration permission and CSRF', async t => {
+  const f = await fixture(t, async () => Response.json({sha:'file',content:'dGVzdA=='}));
+  for (const path of ['users.json','translated_csv/adv_test.csv','translated_draft/adv_test.csv','records/adv_test.json']) {
+    const before = f.calls.length;
+    assert.equal((await f.post('/api/github/read', {kind:'content',path}, {Cookie:''})).status, 401);
+    assert.equal(f.calls.length, before);
+    assert.equal((await f.post('/api/github/read', {kind:'content',path}, {'X-CSRF-Token':''})).status, 403);
+    assert.equal(f.calls.length, before);
+    assert.equal((await f.post('/api/github/read', {kind:'content',path})).status, 200);
+  }
+  const readonly = await fixture(t, undefined, false);
+  assert.equal((await readonly.post('/api/github/read', {kind:'content',path:'users.json'})).status, 403);
+  assert.equal((await readonly.post('/api/auth/logout', {})).status, 200);
+});
+
+async function requestProbe({path='/api/github/read',cookie='',csrf='csrf',push=true,chunks=['{}'],length,loginAllowed=true}={}) {
+  let reads=0, sessionReads=0, writes=0, permissionChecks=0;
+  const session = {expires:Date.now()+60000,token:'test-token',csrf:'csrf'};
+  const app = createApp({CAMPUS_PUBLIC_ORIGIN:origin,GITHUB_CLIENT_ID:'test',GITHUB_CLIENT_SECRET:'test'},
+    async () => { permissionChecks++; return Response.json({permissions:{push}}); }, {
+      resourceRequest:async()=>false,
+      sessions:{get:async id=>{sessionReads++;return id==='valid'?session:undefined;}},
+      pending:{set:async()=>{writes++;}},
+      allowLogin:async()=>loginAllowed,
+    });
+  const headers={origin,cookie,'x-csrf-token':csrf,'content-type':'application/json',...(length===undefined?{}:{'content-length':String(length)})};
+  const req={method:path==='/api/auth/login'?'GET':'POST',url:path,headers,iterator:async function*(){for(const chunk of chunks){reads+=Buffer.byteLength(chunk);yield Buffer.from(chunk);}}};
+  const result={headers:{}};
+  const res={setHeader:(k,v)=>{result.headers[k]=v;},writeHead:status=>{result.status=status;},end:body=>{result.body=body;}};
+  await app.listeners('request')[0](req,res);
+  return {...result,reads,sessionReads,writes,permissionChecks};
+}
+test('rejected POST requests do not consume their bodies or call GitHub unnecessarily', async () => {
+  const large='x'.repeat(1024*1024);
+  for (const [options,status] of [
+    [{},401],
+    [{cookie:'campus_session=valid',csrf:'wrong'},403],
+    [{cookie:'campus_session=valid',push:false},403],
+    [{path:'/api/unknown',cookie:'campus_session=valid'},404],
+    [{cookie:'campus_session=valid',length:1024*1024},413],
+  ]) {
+    const r=await requestProbe({...options,chunks:[large]});
+    assert.equal(r.status,status);assert.equal(r.reads,0);
+    assert.equal(r.permissionChecks,options.push===false?1:0);
+    if(options.path==='/api/unknown') assert.equal(r.sessionReads,0);
+  }
+});
+test('small query limit is enforced for chunked bodies; invalid JSON shapes return 400', async () => {
+  const tooLarge=await requestProbe({cookie:'campus_session=valid',chunks:[' '.repeat(16384),' '.repeat(16384),'x']});
+  assert.equal(tooLarge.status,413);
+  for(const input of ['null','[]','"text"']) assert.equal((await requestProbe({cookie:'campus_session=valid',chunks:[input]})).status,400);
+});
+test('a rejected login performs no session read or OAuth state write', async () => {
+  const denied=await requestProbe({path:'/api/auth/login',cookie:'campus_session=valid',loginAllowed:false});
+  assert.equal(denied.status,429);assert.equal(denied.headers['Retry-After'],'60');
+  assert.equal(denied.sessionReads,0);assert.equal(denied.writes,0);
+  const allowed=await requestProbe({path:'/api/auth/login'});
+  assert.equal(allowed.status,302);assert.equal(allowed.sessionReads,0);assert.equal(allowed.writes,1);
+});

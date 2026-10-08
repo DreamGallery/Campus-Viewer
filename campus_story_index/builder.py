@@ -105,6 +105,12 @@ class CatalogBuilder:
             for r in self.master.table('Story')
             if r.get('type') == 'StoryType_ExtraDearnessStory' and r.get('advAssetId')
         }
+        self.april_fool_story_ids = {
+            story_id for row in self.master.table('StoryGroup')
+            if any('aprilfool' in (row.get(key) or '').lower()
+                   for key in ('id', 'headerAssetId', 'storyThumbnailAssetId'))
+            for story_id in row.get('storyIds', [])
+        }
 
     def warn(self, code, **details):
         self.diagnostics.append({'code': code, **details})
@@ -250,9 +256,13 @@ class CatalogBuilder:
             if (row.get('type') == 'StoryType_Birthday'
                     and (row.get('characterId'), row.get('advAssetId')) in self.extra_dearness_scripts):
                 return 'character.dearness'
-            # The shared AprilFool source enum also contains anniversary campaigns.
-            if 'anniversary' in row.get('id', '') and row.get('type') == 'StoryType_AprilFool':
-                return 'event.campaign'
+            # The game reuses AprilFool for other startup campaigns. Require an
+            # explicit story/group/artwork marker before calling one April Fool.
+            if row.get('type') == 'StoryType_AprilFool':
+                is_april_fool = row.get('id') in self.april_fool_story_ids or any(
+                    'aprilfool' in (row.get(key) or '').lower()
+                    for key in ('id', 'thumbnailAssetId'))
+                return 'event.april_fool' if is_april_fool else 'event.campaign'
             return STORY_TYPES.get(row.get('type', '').removeprefix('StoryType_'), 'other.unclassified')
         if table == 'ProduceStory':
             return PRODUCE_TYPES.get(row.get('type', '').removeprefix('ProduceStoryType_'), 'other.unclassified')

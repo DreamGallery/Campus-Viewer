@@ -1,18 +1,16 @@
 import { api, decode, Github } from './github';
-import { mergeScriptText } from './script-text';
 import { extractInfoFromCsvText, type CsvDataLine } from './upstream/csv';
-import { type DocTask, validateRowsHtmlTags, WORK_BRANCH, WORK_OWNER, WORK_REPO } from './upstream/workflow';
+import { type DocTask, buildChineseTxt, fetchNameDict, WORK_BRANCH, WORK_OWNER, WORK_REPO } from './upstream/workflow';
 
-// Based on upstream buildChineseTxt: replace only text attributes, keeping ADV commands intact.
-// Match original occurrences once so repeated dialogue can have different translations.
-export function translatedScript(raw: string, rows: CsvDataLine[]): string {
-  const errors = validateRowsHtmlTags(rows);
-  if (errors.length) throw new Error(errors.slice(0, 5).join('；'));
-  return mergeScriptText(raw, rows);
+// Manual, batch and proofread exports use the same command-aware merger.
+export function translatedScript(raw: string, rows: CsvDataLine[], nameDict: Record<string, string> = {}): string {
+  return buildChineseTxt(raw, rows, nameDict);
 }
 export async function exportTxt(id: string, csv: string): Promise<string> {
-  const { txt } = await api<{ txt: string }>('script/' + encodeURIComponent(id));
-  return translatedScript(txt, extractInfoFromCsvText(csv).data);
+  const [{ txt }, nameDict] = await Promise.all([
+    api<{ txt: string }>('script/' + encodeURIComponent(id)), fetchNameDict(),
+  ]);
+  return translatedScript(txt, extractInfoFromCsvText(csv).data, nameDict);
 }
 export function downloadFile(content: BlobPart, name: string, type = 'text/plain;charset=utf-8') {
   const url = URL.createObjectURL(new Blob([content], { type }));

@@ -2,13 +2,13 @@
 
 `schema_version=2.0.0`。公共字段统一 snake_case，数组顺序确定，相同输入快照重复构建产生相同字节。生成器不保存当前时间或绝对路径。上游内容变化会改变 sources 中的内容指纹。
 
-## 字段调整
+## 来源字段与映射
 
-| 旧字段/结构 | 新位置 | 含义 |
+| 来源字段或数据 | 索引字段 | 含义 |
 |---|---|---|
-| 各处重复的 advAssetId / assetId | entries.script_id → scripts.id | 统一脚本引用；卡图 assetId 不参与此映射 |
-| csvPath | scripts.csv_path | 相对 Campus-Story 根目录的实际文件路径；不存在时 null |
-| mainStories / eventStories / idolCardStories 等 | entries + memberships | 统一入口与关系，避免七套不兼容字段 |
+| advAssetId / 剧情 assetId | entries.script_id → scripts.id | 统一脚本引用；卡图 assetId 不参与此映射 |
+| CSV 文件扫描 | scripts.csv_path | 相对 Campus-Story 根目录的实际文件路径；不存在时 null |
+| 剧情源记录及分组关系 | entries + memberships | 剧情入口与所属分组 |
 | characterId / characterIds | character_ids | 统一数组，明确关联角色；不代表已经识别对白中的全部发言者 |
 | viewConditionSetId | conditions.visible_if | 条件组 ID，并非计算后的布尔值 |
 | unlockConditionSetId | conditions.unlocked_if | 解锁条件组 ID |
@@ -18,7 +18,7 @@
 | produceEventHintProduceConditionDescriptions | hints | 保留日文条件说明 |
 | dearnessLevel | context.dearness_level | 亲密度等级，不通过字符串拆分强转 |
 | voiceAssetId / voiceAssetId1 / voiceAssetId2 | voice_bindings | 保留所有明确语音参数及其原字段名 |
-| 原 type | source_type + category_id | 原始枚举与面向网站的分类分离 |
+| type | source_type + category_id | 原始枚举与面向网站的分类分离 |
 
 ## entries：统一入口
 
@@ -40,7 +40,7 @@
 
 分组关系优先用于补充未知类别。脚本别名如果只有一个已知分类，则继承该分类。若共用资源同时存在“亲密度”和“培养阶段”入口，未知别名归亲密度，但已知入口各自的原分类保持不变。仍无明确信息时仅对有限、可解释的文件名前缀作带标记的分类建议，其余进入待分类。
 
-当前没有从脚本正文抽取角色；卡片关联角色不等于每条对白的发言角色。
+剧情目录不从脚本正文抽取角色；卡片关联角色不等于每条对白的发言角色。
 
 ## scripts：资源去重与文本状态
 
@@ -55,7 +55,7 @@
 - `source_text_sha256`：按 CSV 顺序对非空 text 行的 `[id,name,text]` 规范化后计算。改 trans 不影响它；它不覆盖 ADV 控制指令、音频或其他非文本元数据。
 - `text_row_count`、`translated_row_count`：非空原文行数、其中 trans 非空的行数；并非审核状态。
 
-协作系统未来应将翻译、认领和审核记录存入独立持久层。本生成器只读取已有 trans 的数量，不修改翻译，不生成可编辑句子 ID。
+翻译、认领和校对记录由协作模块保存在 GitHub 工作仓库。索引器只统计 CSV 中已有 trans 的数量，不修改翻译，不生成可编辑句子 ID。
 
 ## groups / memberships
 
@@ -70,11 +70,11 @@ groups.kind 包括 `character`、`main_part`、`main_chapter`、`story_group`、
 
 ## 来源与完整性
 
-source_records 保留被使用的原始行。condition_sets 按 ID 保存**行数组**，不把有多个子条件的组覆盖成单行；本阶段不求值。sources 同时保存 Git 提交、所有读取文件的 SHA-256，以及文件哈希映射的整体指纹，能识别未提交数据变化。
+source_records 保留被使用的原始行。condition_sets 按 ID 保存**行数组**，不把有多个子条件的组覆盖成单行；只保存条件定义，不计算是否满足。sources 同时保存 Git 提交、所有读取文件的 SHA-256，以及文件哈希映射的整体指纹，能识别未提交数据变化。
 
 资源底册扫描 masterdata 中全部 `adv_` 字面引用，排除 PhotoBackground，规范化 AssetDownload 的 `.txt`。这不能覆盖客户端动态拼接或未提取的资源；CSV 反查用于补充当前能观察到的文件。新来源表会保留为后备入口并诊断；strict 模式要求补充适配器。
 
-已知表的主键稳定；未来无明确键的表采用内容哈希后备键，并报 `unstable_source_key`。未来上游表的主键结构变化需要迁移，不能承诺任意上游修改都保持同一个入口 ID。
+已知表使用明确主键；没有明确键的表采用内容哈希后备键，并报告 `unstable_source_key`。上游主键结构变化可能改变入口 ID。
 
 
 ## 网页目录去重与培养事件分支

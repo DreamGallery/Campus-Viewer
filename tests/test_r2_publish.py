@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from botocore.exceptions import ClientError
-from campus_story_index.r2_publish import publish_release, UploadProgress, list_media
+from campus_story_index.r2_publish import publish_release, UploadProgress, list_media, digest
 
 class S3:
     def __init__(self): self.objects={}; self.metadata={}; self.fail=None; self.uploads=[]; self.content_types={}; self.heads=[]; self.list_pages=0
@@ -87,6 +87,24 @@ class R2Tests(unittest.TestCase):
             mapping=json.loads(s3.objects['test/releases/new/file-map.json'])['files']
             self.assertEqual(mapping['story/CSV/a.csv'],'releases/old/story/CSV/a.csv')
             self.assertFalse(any(k.endswith('/a.csv') or k.endswith('/a.txt') for k in s3.uploads))
+
+    def test_hashed_text_is_read_once_without_reading_previous_release(self):
+        env = {'CAMPUS_R2_ENDPOINT':'https://test', 'CAMPUS_R2_BUCKET':'b', 'CAMPUS_R2_PREFIX':'test',
+               'AWS_ACCESS_KEY_ID':'test', 'AWS_SECRET_ACCESS_KEY':'test'}
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, env):
+            root = Path(folder); s3 = S3(); self.stage(root, 'first'); self.stage(root, 'second')
+            publish_release(root, 'first', s3)
+            (root / 'current').symlink_to(root / 'releases/first')
+            # A changed file of the same size must still get a different immutable key.
+            (root / 'releases/second/adv/a.txt').write_text('new')
+            with patch('campus_story_index.r2_publish.digest', wraps=digest) as hashed:
+                publish_release(root, 'second', s3)
+            checked = [call.args[0] for call in hashed.call_args_list]
+            for relative in ['story/CSV/a.csv', 'adv/a.txt']:
+                self.assertEqual(checked.count(root / 'releases/second' / relative), 1)
+                self.assertNotIn(root / 'releases/first' / relative, checked)
+            self.assertEqual(len([key for key in s3.uploads if key.endswith('/a.csv')]), 1)
+            self.assertEqual(len([key for key in s3.uploads if key.endswith('/a.txt')]), 2)
 
     def test_media_inventory_pagination_and_prefix_isolation(self):
         s3 = S3()

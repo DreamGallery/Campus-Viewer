@@ -1,9 +1,11 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { DocTask, sameWorkUser, subscribeWorkUsers, workUsersVersion } from './upstream/workflow';
 import { completionStats } from './completion-stats';
 export function CompletionStats({ tasks, login }: { tasks: DocTask[]; login: string }) {
-  useSyncExternalStore(subscribeWorkUsers, workUsersVersion);
-  const stats = completionStats(tasks);
+  const usersVersion = useSyncExternalStore(subscribeWorkUsers, workUsersVersion);
+  // Display names and ownership are resolved through the shared user directory.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stats = useMemo(() => completionStats(tasks), [tasks, usersVersion]);
   const [sort, setSort] = useState<'total' | 'translation' | 'proofread' | 'chapters'>('total');
   const mine = stats.find(s => sameWorkUser(s.id, login));
   const sorted = [...stats].sort((a,b) => b[sort]-a[sort] || b.total-a.total || a.name.localeCompare(b.name));

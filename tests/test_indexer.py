@@ -89,6 +89,33 @@ class IndexerTest(unittest.TestCase):
         self.assertEqual(entry['category_id'], 'character.training_school')
         self.assertEqual(next(s for s in catalog['scripts'] if s['id'] == 'adv_unlisted')['text_status'], 'missing')
 
+    def test_april_fool_enum_requires_explicit_event_evidence(self):
+        cases = [
+            ('story-other-01_hski-01', 'adv_startup_other-01_hski-01', 'event.campaign'),
+            ('story-1st-anniversary-20250516', 'adv_startup_2025_anniv-01_cmmn-01', 'event.campaign'),
+            ('story-aprilfool-20260402-01', 'adv_startup_2026_ef-01_cmmn-01', 'event.april_fool'),
+            ('story-group-member', 'adv_group_member', 'event.april_fool'),
+            ('story-thumbnail', 'adv_thumbnail', 'event.april_fool'),
+        ]
+        rows = [self.story(sid, asset, type='StoryType_AprilFool') for sid, asset, _ in cases]
+        rows[-1]['thumbnailAssetId'] = 'img_general_event_aprilfool_test-story-banner'
+        self.table('Story', rows)
+        self.table('StoryGroup', [{
+            'id': 'shared-source-type', 'title': 'イベント', 'storyType': 'StoryType_AprilFool',
+            'storyIds': ['story-group-member'], 'headerAssetId': 'img_general_event_aprilfool_test-story-header',
+        }])
+        for _, asset, _ in cases:
+            self.csv(asset)
+        self.csv('adv_startup_other-99_test-01')
+        catalog = self.build()
+        entries = {e['script_id']: e for e in catalog['entries']}
+        scripts = {s['id']: s for s in catalog['scripts']}
+        for _, asset, category in cases:
+            self.assertEqual(entries[asset]['category_id'], category)
+            self.assertEqual(entries[asset]['source_type'], 'StoryType_AprilFool')
+            self.assertEqual(scripts[asset]['metadata_status'], 'referenced')
+        self.assertEqual(scripts['adv_startup_other-99_test-01']['metadata_status'], 'unlinked_masterdata')
+
     def test_download_extension_and_background_exclusion(self):
         self.table('AssetDownload', [{'id': 'adv_sample.txt'}, {'id': 'adv_tutorial_only.txt'}])
         self.table('PhotoBackground', [{'id': 'photo', 'backgroundAssetId': 'adv_room'}])

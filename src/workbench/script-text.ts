@@ -1,7 +1,11 @@
 import { csvText } from './text-format';
 import type { CsvDataLine } from './upstream/csv';
 
-export function mergeScriptText(raw: string, rows: CsvDataLine[]): string {
+function scriptValue(value: string): string {
+  return csvText(value).replace(/\\.|[[\]=]/g, token => token.startsWith('\\') ? token : '\\' + token);
+}
+
+export function mergeScriptText(raw: string, rows: CsvDataLine[], nameDict: Readonly<Record<string, string>> = {}): string {
   const pending = rows.filter(r => r.text && !['info', '译者'].includes(r.id));
   const used = new Set<number>();
   const changes: { start: number; end: number; text: string }[] = [];
@@ -28,6 +32,12 @@ export function mergeScriptText(raw: string, rows: CsvDataLine[]): string {
       }
       attrs[field[1]] = { start, end: pos, value: raw.slice(start, pos) };
     }
+    // Match CSV rows against the original speaker; edits apply only after all matching.
+    const speaker = command[1] === 'message' ? attrs.name : undefined;
+    if (speaker && Object.prototype.hasOwnProperty.call(nameDict, speaker.value)) {
+      const translated = nameDict[speaker.value];
+      if (translated?.trim()) changes.push({ start: speaker.start, end: speaker.end, text: scriptValue(translated) });
+    }
     const text = attrs[command[1] === 'title' ? 'title' : 'text'];
     if (!text?.value.trim()) continue;
     const name = command[1] === 'title' ? '__title__' : command[1] === 'narration' ? '__narration__' : command[1] === 'choice' ? '' : (attrs.name?.value || '__narration__');
@@ -36,10 +46,9 @@ export function mergeScriptText(raw: string, rows: CsvDataLine[]): string {
     if (i < 0) throw new Error(`原脚本与 CSV 不一致：${text.value.slice(0, 35)}`);
     used.add(i);
     if (pending[i].trans.trim()) {
-      const value = csvText(pending[i].trans).replace(/\\.|[[\]=]/g, token => token.startsWith('\\') ? token : '\\' + token);
-      changes.push({ start: text.start, end: text.end, text: value });
+      changes.push({ start: text.start, end: text.end, text: scriptValue(pending[i].trans) });
     }
   }
   if (used.size !== pending.length) throw new Error(`有 ${pending.length - used.size} 条 CSV 原文未匹配到脚本，已停止 TXT 导出`);
-  return changes.reverse().reduce((text, c) => text.slice(0, c.start) + c.text + text.slice(c.end), raw);
+  return changes.sort((a, b) => b.start - a.start).reduce((text, c) => text.slice(0, c.start) + c.text + text.slice(c.end), raw);
 }

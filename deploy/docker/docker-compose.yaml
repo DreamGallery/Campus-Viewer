@@ -1,7 +1,7 @@
 name: campus-r2-updater
 services:
   updater:
-    image: ${CAMPUS_UPDATER_IMAGE:-dreamgallery/campus-r2-updater:20261007-toolkit-api}
+    image: ${CAMPUS_UPDATER_IMAGE:-dreamgallery/campus-r2-updater:20261008-unity6}
     env_file: .env.r2.local
     environment:
       CAMPUS_MASTER_SOURCE: ${CAMPUS_MASTER_SOURCE:-api}
