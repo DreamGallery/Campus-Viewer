@@ -8,6 +8,7 @@ import shutil
 import os
 import subprocess
 import tempfile
+import time
 from .audio_extract import encode_flac, file_digest, wav_metadata
 import yaml
 from .audio_download import download_one
@@ -155,51 +156,69 @@ def main():
             raise RuntimeError('Music resource download failed')
         return args.cache / row['name']
     tracks = []
-    for number, row in enumerate(selected, 1):
-        ident, asset = row['id'], row['gameVersionAssetId']
-        print(f'Music [{number}/{len(selected)}]: {ident}', flush=True)
-        awb = download(resources[asset+'.awb'])
-        acb = download(resources[asset+'.acb']) if asset+'.acb' in resources else None
-        decoded = decode_song(awb, acb, args.output, args.cache, args.decoder, decoder_hash, args.ffmpeg)
-        match = re.fullmatch(r'sud_music_general_(.+)-([a-z0-9]+)_game(?:-inst)?', asset)
-        song, cid = match.groups() if match else ('', '')
-        character = characters.get(cid)
-        artist = character['lastName']+' '+character['firstName'] if character else '学園アイドルマスター'
-        jacket = 'img_general_music_jacket_' + row['jacketAssetId']
-        if jacket+'.png' in resources:
-            cover = download(resources[jacket+'.png'])
-            cover_name = '/music/'+publish_file(cover, args.output)
-        elif jacket in bundles:
-            result = extract_one(bundles[jacket], manifest['urlFormat'], args.cache, args.cache/'covers')
-            cover = args.cache/'covers'/Path(result['path']).name
-            cover_name = '/music/'+publish_file(cover, args.output)
-        else:
-            cover_name = '/favicon.svg'
-        timeline_name = 'tln_live_' + song
-        cache_key = bundles[timeline_name]['md5'] if timeline_name in bundles and not asset.endswith('-inst') else None
-        cached = args.cache/(timeline_name+'.lyrics.json')
-        previous = json.loads(cached.read_text()) if cached.exists() else {}
-        if cache_key and previous.get('source_md5') == cache_key and previous.get('parser_version') == 2:
-            lyrics = previous['lines']
-        elif cache_key:
-            lyrics = extract_lyrics(download(bundles[timeline_name]), timeline_name, song)
-            atomic_write(cached, {'source_md5': cache_key, 'parser_version': 2, 'lines': lyrics})
-        else:
-            lyrics = []
-        # Don't attach another arrangement's timeline if it extends beyond this recording.
-        if lyrics and lyrics[-1]['end'] > decoded['duration'] + 1:
-            print('  Lyrics exceed recording duration; omitted', flush=True)
-            lyrics = []
-        tracks.append({'id': ident, 'title': row['title'], 'artist': artist, 'character_id': cid,
-            'audio': '/music/'+decoded['file'], 'cover': cover_name, 'version': '游戏版本 · FLAC',
-            'duration': decoded['duration'], 'format': 'flac', 'sample_rate': decoded['sample_rate'],
-            'credits': {k: row.get(k) or '' for k in ('lyrics', 'composer', 'arranger')},
-            'lyrics': lyrics, 'lyrics_source': timeline_name if lyrics else None})
-        print(f'  FLAC verified; {len(lyrics)} timed lyric lines', flush=True)
-        gc.collect()
+    lyrics_cached = lyrics_parsed = lyrics_mismatched = 0
+    started = last_report = time.monotonic()
+    print(f'音乐: 开始处理 {len(selected)} 首', flush=True)
+    try:
+        for number, row in enumerate(selected, 1):
+            ident, asset = row['id'], row['gameVersionAssetId']
+            awb = download(resources[asset+'.awb'])
+            acb = download(resources[asset+'.acb']) if asset+'.acb' in resources else None
+            decoded = decode_song(awb, acb, args.output, args.cache, args.decoder, decoder_hash, args.ffmpeg)
+            match = re.fullmatch(r'sud_music_general_(.+)-([a-z0-9]+)_game(?:-inst)?', asset)
+            song, cid = match.groups() if match else ('', '')
+            character = characters.get(cid)
+            artist = character['lastName']+' '+character['firstName'] if character else '学園アイドルマスター'
+            jacket = 'img_general_music_jacket_' + row['jacketAssetId']
+            if jacket+'.png' in resources:
+                cover = download(resources[jacket+'.png'])
+                cover_name = '/music/'+publish_file(cover, args.output)
+            elif jacket in bundles:
+                result = extract_one(bundles[jacket], manifest['urlFormat'], args.cache, args.cache/'covers')
+                cover = args.cache/'covers'/Path(result['path']).name
+                cover_name = '/music/'+publish_file(cover, args.output)
+            else:
+                cover_name = '/favicon.svg'
+            timeline_name = 'tln_live_' + song
+            cache_key = bundles[timeline_name]['md5'] if timeline_name in bundles and not asset.endswith('-inst') else None
+            cached = args.cache/(timeline_name+'.lyrics.json')
+            previous = json.loads(cached.read_text()) if cached.exists() else {}
+            reused_lyrics = bool(cache_key and previous.get('source_md5') == cache_key and previous.get('parser_version') == 2)
+            if reused_lyrics:
+                lyrics = previous['lines']
+            elif cache_key:
+                lyrics = extract_lyrics(download(bundles[timeline_name]), timeline_name, song)
+                atomic_write(cached, {'source_md5': cache_key, 'parser_version': 2, 'lines': lyrics})
+            else:
+                lyrics = []
+            # Don't attach another arrangement's timeline if it extends beyond this recording.
+            if lyrics and lyrics[-1]['end'] > decoded['duration'] + 1:
+                lyrics_mismatched += 1
+                lyrics = []
+            if lyrics:
+                lyrics_cached += int(reused_lyrics)
+                lyrics_parsed += int(not reused_lyrics)
+            tracks.append({'id': ident, 'title': row['title'], 'artist': artist, 'character_id': cid,
+                'audio': '/music/'+decoded['file'], 'cover': cover_name, 'version': '游戏版本 · FLAC',
+                'duration': decoded['duration'], 'format': 'flac', 'sample_rate': decoded['sample_rate'],
+                'credits': {k: row.get(k) or '' for k in ('lyrics', 'composer', 'arranger')},
+                'lyrics': lyrics, 'lyrics_source': timeline_name if lyrics else None})
+            gc.collect()
+            now = time.monotonic()
+            if number < len(selected) and now - last_report >= 10:
+                print(f'音乐: 已处理 {number}/{len(selected)} ({number / len(selected):.1%})，'
+                      f'歌词复用 {lyrics_cached} 首、新解析 {lyrics_parsed} 首', flush=True)
+                last_report = now
+    except Exception as exc:
+        print(f'音乐: {row["id"]} 处理失败（{type(exc).__name__}）', flush=True)
+        raise
     atomic_write(args.output/'library.json', {'schema_version': 1, 'revision': manifest['revision'], 'tracks': tracks})
     (args.output/'library.json').chmod(0o644)
-    print(json.dumps({'tracks':len(tracks), 'timed_tracks':sum(bool(t['lyrics']) for t in tracks)}), flush=True)
+    unavailable = len(tracks) - lyrics_cached - lyrics_parsed
+    print(f'音乐: 完成 {len(tracks)} 首；歌词复用 {lyrics_cached} 首、新解析 {lyrics_parsed} 首、'
+          f'无可用歌词 {unavailable} 首；耗时 {time.monotonic() - started:.0f}s', flush=True)
+    if lyrics_mismatched:
+        print(f'音乐: {lyrics_mismatched} 首歌词时间轴超出录音时长，已略过', flush=True)
 
 if __name__ == '__main__':
     main()

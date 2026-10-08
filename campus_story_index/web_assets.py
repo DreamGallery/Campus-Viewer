@@ -2,6 +2,7 @@
 Header deobfuscation adapted from the user's HatsuboshiWebsite/src/decrypt.py.
 """
 import argparse
+from collections import Counter
 from .parallel import map_bounded
 import hashlib
 import json
@@ -9,6 +10,7 @@ from pathlib import Path
 import re
 import os
 import tempfile
+import time
 from .audio_download import download_one
 from .io import atomic_write
 from .pending_text import filename_hints
@@ -185,6 +187,9 @@ def main():
     assets = {r['name']: r for r in manifest['assetBundleList'] if r.get('state') != 4}
     names = image_requests(json.loads(args.catalog.read_text()))
     results = [{'name': name, 'status': 'not_in_manifest'} for name in names if name not in assets]
+    counts = Counter(r['status'] for r in results)
+    started = last_report = time.monotonic()
+    print(f'图片: 开始处理 {len(names)} 项', flush=True)
     def process(name):
         try:
             return extract_one(assets[name], manifest['urlFormat'], args.cache, args.output / 'images')
@@ -192,14 +197,19 @@ def main():
             return {'name': name, 'status': 'failed', 'error': type(exc).__name__ + ': ' + str(exc)[:160]}
     for result in map_bounded(process, (name for name in names if name in assets), args.workers):
         results.append(result)
-        if len(results) % 20 == 0:
-            print(f'{len(results)}/{len(names)} images', flush=True)
+        counts[result['status']] += 1
+        now = time.monotonic()
+        if len(results) < len(names) and now - last_report >= 10:
+            print(f'图片: 已处理 {len(results)}/{len(names)} ({len(results) / len(names):.1%})，'
+                  f'缓存复用 {counts["cached"]} 项、新解包 {counts["extracted"]} 项', flush=True)
+            last_report = now
     atomic_write(args.output / 'manifest.json', {'revision': manifest['revision'],
                  'images': sorted(results, key=lambda r: r['name'])})
     (args.output / 'manifest.json').chmod(0o644)
-    from collections import Counter
-    print(dict(Counter(r['status'] for r in results)), flush=True)
-    return int(any(r['status'] == 'failed' for r in results))
+    print(f'图片: 已处理 {len(results)}/{len(names)}；缓存复用 {counts["cached"]} 项、'
+          f'新解包 {counts["extracted"]} 项、清单未收录 {counts["not_in_manifest"]} 项、'
+          f'失败 {counts["failed"]} 项；耗时 {time.monotonic() - started:.0f}s', flush=True)
+    return int(counts['failed'] > 0)
 
 if __name__ == '__main__':
     raise SystemExit(main())

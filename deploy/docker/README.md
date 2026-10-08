@@ -29,7 +29,7 @@ docker compose logs -f --tail=100 updater
 
 ## 更新与数据
 
-修改 `.env` 中的镜像版本后，重新执行 `docker compose pull updater` 和 `docker compose up -d updater`。保留原有挂载、账号目录和配置。
+镜像标签格式为 `cfN`，其中 `N` 为递增的版本号。部署时固定使用已发布的版本；修改 `.env` 后执行 `docker compose pull updater` 和 `docker compose up -d updater`，保留原有挂载、账号目录和配置。
 
 `campus-r2-updater_runtime` 卷保存仓库、缓存、发布版本和增量基线。普通升级不要执行 `down -v`；同一 R2 前缀只运行一个更新器。
 

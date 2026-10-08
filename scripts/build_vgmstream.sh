@@ -5,6 +5,8 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 source_dir="$root/tools/vgmstream-src"
 build_dir="$root/tools/vgmstream-build"
 revision=764c84c5048932054356f2ea67a71ea7673abc83
+# Keep the embedded build date stable so unchanged decoders reuse audio caches.
+export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-1791331200}
 if [ ! -d "$source_dir/.git" ]; then
     git clone https://github.com/vgmstream/vgmstream.git "$source_dir"
 fi

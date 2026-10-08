@@ -2,11 +2,15 @@
 # Builds target-platform decoder and Python dependencies inside the image.
 set -eu
 if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 dockerhub-user/repository version [linux/amd64,linux/arm64]" >&2
+    echo "Usage: $0 dockerhub-user/repository cfN [linux/amd64,linux/arm64]" >&2
     exit 2
 fi
 image=$1
 version=$2
+if ! printf '%s\n' "$version" | LC_ALL=C grep -Eq '^cf[1-9][0-9]*$'; then
+    echo 'Use an incrementing Cloudflare image tag such as cf14.' >&2
+    exit 2
+fi
 platforms=${3:-linux/amd64,linux/arm64}
 mirror=${CAMPUS_DEBIAN_MIRROR:-https://deb.debian.org}
 pip_index=${CAMPUS_PIP_INDEX_URL:-https://pypi.org/simple}
