@@ -30,16 +30,13 @@
 [data-theme="dark"] .pagination button,
 [data-theme="dark"] .outline-button,
 [data-theme="dark"] .filter-chip,
-[data-theme="dark"] .character-match button,
 [data-theme="dark"] .skip-link { color: #e5e4e1; background: #262b33; border-color: #51535a; }
 [data-theme="dark"] .filter-tabs button[aria-pressed="true"],
-[data-theme="dark"] .character-match button[aria-pressed="true"],
 [data-theme="dark"] .lightbox-stages button[aria-pressed="true"] { background: #54452e; color: #ffe2af; border-color: #d3af72; }
 [data-theme="dark"] .filter-chip:has(input:checked) { border-color: #e3be7f; background: #353029; }
 [data-theme="dark"] .character-option:has(input:checked) { background: color-mix(in srgb, var(--idol) 18%, #20242b); }
 [data-theme="dark"] .character-option:has(input:focus-visible),
-[data-theme="dark"] .filter-chip:has(input:focus-visible),
-[data-theme="dark"] .character-match button:focus-visible { outline-color: #f2d4a1; }
+[data-theme="dark"] .filter-chip:has(input:focus-visible) { outline-color: #f2d4a1; }
 [data-theme="dark"] select { color: #e5e4e1; background: #262b33; border-color: #62616a; }
 [data-theme="dark"] select option, [data-theme="dark"] select optgroup { color: #e5e4e1; background: #262b33; }
 [data-theme="dark"] .search-field input { color: #e5e4e1; }

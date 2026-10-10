@@ -325,7 +325,6 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState("default");
   const [selectedCharacters, setSelectedCharacters] = useState<string[]>([]);
-  const [characterMatch, setCharacterMatch] = useState<"any" | "all">("any");
   const [rarities, setRarities] = useState<string[]>([]);
   const [attributes, setAttributes] = useState<string[]>([]);
   const toggle = (value: string, selected: string[], setter: (values: string[]) => void) => {
@@ -335,7 +334,7 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
   const filterCharacters = (catalog.filter_characters || catalog.characters)
     .filter(c => entries?.some(e => e.character_ids.includes(c.id)));
   const resetFilters = () => {
-    setSearch(""); setTab("all"); setSelectedCharacters([]); setCharacterMatch("any"); setRarities([]); setAttributes([]); setPage(1);
+    setSearch(""); setTab("all"); setSelectedCharacters([]); setRarities([]); setAttributes([]); setPage(1);
   };
   const categories = catalog.categories.filter((c) => c.parent_id === root);
   const query = normalize(search);
@@ -354,7 +353,7 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
     for (const e of entries || []) {
       if (tab !== "all" && e.category_id !== tab) continue;
       if (selectedCharacters.length) {
-        const matches = root === "support_card" && characterMatch === "all"
+        const matches = root === "support_card"
           ? selectedCharacters.every(id => e.character_ids.includes(id))
           : selectedCharacters.some(id => e.character_ids.includes(id));
         if (!matches) continue;
@@ -396,7 +395,7 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
       return sort.endsWith("newest") ? right - left : left - right;
     });
     return result;
-  }, [entries, tab, query, catalog.characters, catalog.filter_characters, root, sort, selectedCharacters, characterMatch, rarities, attributes]);
+  }, [entries, tab, query, catalog.characters, catalog.filter_characters, root, sort, selectedCharacters, rarities, attributes]);
   if (!path) return <div className="empty-state">当前角色暂无收录剧情。</div>;
   if (!entries) return <Feedback error={error} />;
   const totalScripts = new Set(entries.map((e) => e.script_id)).size;
@@ -473,10 +472,6 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
         </div>
         {(list === "character" || root === "support_card") && <fieldset className="character-filters">
           <legend>角色 <small>可多选</small></legend>
-          {root === "support_card" && <div className="character-match" role="group" aria-label="角色匹配方式">
-            <button type="button" aria-pressed={characterMatch === "any"} onClick={() => { setCharacterMatch("any"); setPage(1); }}>或 · 任一角色</button>
-            <button type="button" aria-pressed={characterMatch === "all"} onClick={() => { setCharacterMatch("all"); setPage(1); }}>且 · 全部角色</button>
-          </div>}
           <div className="character-options">{filterCharacters.map(c => {
             const profile = catalog.characters.find(p => p.id === c.id);
             const stamps = catalog.filter_characters?.find(p => p.id === c.id);

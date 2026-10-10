@@ -1265,6 +1265,11 @@ b, strong { font-weight: 600; }
 .filter-chip img { width: 26px; height: 23px; object-fit: contain; }
 .sort-note { margin: 16px 0 0; color: #81796e; font-size: 11px; }
 .card-facets, .release-date { display: block; font-size: 11px; color: #81796e; margin: 8px 0 0; }
+@media (max-width: 1100px) {
+  .character-options { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 5px; margin: -5px; scroll-padding-inline: 5px; }
+  .character-options::-webkit-scrollbar { display: none; }
+  .character-option { flex-shrink: 0; }
+}
 @media (max-width: 600px) { .directory-filters { padding: 14px; } .character-options { gap: 12px 2px; } .character-option { width: 68px; } }
 
 /* Keep native checkbox semantics and keyboard focus without a visible checkbox. */
@@ -1278,11 +1283,6 @@ b, strong { font-weight: 600; }
 .character-option:has(input:focus-visible), .filter-chip:has(input:focus-visible) { outline: 2px solid #312f2b; outline-offset: 3px; }
 .filter-chip { position: relative; border-width: 2px; }
 .filter-chip:has(input:checked) { border-color: #ab8852; background: #fff8; }
-
-.character-match { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
-.character-match button { padding: 6px 12px; border: 1px solid #ddd4c6; border-radius: 6px; background: #fff8; font-size: 12px; }
-.character-match button[aria-pressed="true"] { border-color: #ab8852; color: #775324; background: #f1e7d7; }
-.character-match button:focus-visible { outline: 2px solid #312f2b; outline-offset: 3px; }
 
 .updates-intro, .updates-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin: 24px 0; font-size: 13px; }
 .updates-intro p, .pending-explanation { color: #81796e; font-size: 12px; line-height: 1.9; }
