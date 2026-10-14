@@ -1,0 +1,35 @@
+.work-confirm-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  padding: 28px;
+  border: 1px solid rgb(185 157 111 / 48%);
+  border-radius: 16px;
+  color: inherit;
+  background: #fff;
+  -webkit-backdrop-filter: blur(22px) saturate(125%);
+  backdrop-filter: blur(22px) saturate(125%);
+  box-shadow: 0 24px 72px rgb(24 20 14 / 22%), inset 0 1px 0 rgb(255 255 255 / 65%);
+  overflow-wrap: anywhere;
+}
+.work-confirm-dialog::backdrop { background: rgb(23 20 15 / 35%); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.work-confirm-dialog[open] { animation: work-confirm-enter .18s ease-out; }
+.work-confirm-dialog .work-confirm-heading { margin: 0; font-size: 20px; font-weight: 500; line-height: 1.4; }
+.work-confirm-message { margin: 20px 0 24px; font-size: 14px; line-height: 1.85; }
+.work-confirm-message p + p { margin-top: 10px; }
+.work-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.work-confirm-dialog .work-confirm-button { min-width: 100px; min-height: 42px; padding: 9px 16px; border: 1px solid rgb(168 153 110 / 53%); border-radius: 8px; font: inherit; font-size: 14px; line-height: 1.5; color: inherit; background: transparent; }
+.work-confirm-dialog .work-confirm-primary { border-color: var(--gold); background: rgb(181 145 64 / 12%); }
+.work-confirm-dialog button:hover { background: rgb(168 153 110 / 16%); }
+.work-confirm-dialog button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+[data-theme="dark"] .work-confirm-dialog { background: rgb(28 32 39 / 93%); border-color: #72706a; box-shadow: 0 24px 80px #0008; }
+[data-theme="dark"] .work-confirm-dialog::backdrop { background: #0008; }
+@keyframes work-confirm-enter { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (max-width: 480px) {
+  .work-confirm-dialog { padding: 22px 20px; }
+  .work-confirm-dialog .work-confirm-heading { font-size: 18px; }
+  .work-confirm-actions .work-confirm-button { flex: 1; min-width: 0; padding-inline: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .work-confirm-dialog[open] { animation: none; } }
