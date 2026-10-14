@@ -13,6 +13,7 @@ import uuid
 import traceback
 
 from .io import atomic_write
+from .local_releases import KEEP_ENV, prune_local_releases, retention_count
 from .resource_archive import prepare_archive, prune_archives
 from .audio_download import fetch_manifest
 from .voice_encoding import initialize_voice_encoding
@@ -75,7 +76,8 @@ def input_signature(repos, manifest, master_snapshot=None):
         code.update(path.relative_to(Path(__file__).parent).as_posix().encode())
         code.update(path.read_bytes())
     # Store only a digest: configuration can include private endpoints or credentials.
-    config = {k: v for k, v in os.environ.items() if k.startswith('CAMPUS_')}
+    # Local retention does not change published resources or require a rebuild.
+    config = {k: v for k, v in os.environ.items() if k.startswith('CAMPUS_') and k != KEEP_ENV}
     return hashlib.sha256(json.dumps({'commits': commits, 'manifest': manifest,
         'code': code.hexdigest(), 'config': config, 'master': master_snapshot}, sort_keys=True).encode()).hexdigest()
 
@@ -140,8 +142,9 @@ def update(root):
             atomic_write(root / 'status.json', status)
             (root / 'status.json').chmod(0o644)
         try:
-            phase('检查对话语音编码配置')
+            phase('检查更新器配置')
             try:
+                keep_releases = retention_count()
                 voice_encoding = initialize_voice_encoding(root)
             except ValueError as exc:
                 print(f'Updater: {exc}', flush=True)
@@ -161,6 +164,7 @@ def update(root):
             if os.getenv('CAMPUS_FORCE_UPDATE') != '1' and saved.exists() and json.loads(saved.read_text()).get('signature') == inputs:
                 status.update(state='ready', revision=manifest['revision'], release=(root / 'current').resolve().name)
                 phase('仓库与游戏资源未变化，跳过构建和上传')
+                prune_local_releases(root, keep_releases)
                 return True
             atomic_write(cache / 'audio/OctoManifest.json', manifest)
             generated = cache / 'generated'
@@ -191,8 +195,8 @@ def update(root):
             manifest = json.loads((cache / 'audio/OctoManifest.json').read_text())
             revision = manifest['revision']
             status.update(revision=revision, release=publish(root, cache, repos, manifest, inputs), last_success=int(time.time()), state='ready')
+            prune_local_releases(root, keep_releases)
             phase('更新完成')
-            # Previous releases remain for explicit rollback; no automatic destructive pruning.
             return True
         except Exception as exc:
             status.update(state='error', error=type(exc).__name__ + '；请查看更新器日志')

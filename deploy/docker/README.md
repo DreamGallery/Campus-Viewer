@@ -33,6 +33,8 @@ docker compose logs -f --tail=100 updater
 
 `campus-r2-updater_runtime` 卷保存仓库、缓存、发布版本和增量基线。普通升级不要执行 `down -v`；同一 R2 前缀只运行一个更新器。
 
+本地发布默认保留 2 份（含当前版本），每轮成功检查后清理多余版本。在 `.env.r2.local` 中设置 `CAMPUS_LOCAL_RELEASES_KEEP=1` 可仅保留当前版本，设为 `0` 关闭自动清理。缓存、R2 对象和最近五份增量下载包不受影响。
+
 默认从游戏 API 获取 masterdb，Toolkit 配置使用 `API` 分支。容器无需开放入站端口，需要访问 GitHub、游戏资源服务和 R2。
 
 R2、OAuth、语音编码与资源保留规则见[Cloudflare 部署说明](../../docs/cloudflare-deployment.md)。
