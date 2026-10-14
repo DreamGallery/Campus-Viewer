@@ -7,3 +7,4 @@ Retrieved 2026-09-21. Original materials belong to their respective rights holde
 
 - classroom-desktop.jpg: https://gakuen.idolmaster-official.jp/assets/img/idol/saki/bg_pc.jpg
 - Other stories navigation icon: Lucide LibraryBig, https://lucide.dev/icons/library-big (bundled lucide-react).
+- Loading screen: https://gakuen.idolmaster-official.jp/; reuses the local crest and geometric pattern. Loading text uses the Poppins Thin subset in `public/fonts/`, licensed under `Poppins-OFL.txt`.

@@ -1,0 +1,50 @@
+@font-face {
+  font-family: "Campus Loading";
+  src: url("/fonts/Poppins-Thin-Loading.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 100;
+  font-display: swap;
+}
+.page-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  color: #ffe7bf;
+  background: linear-gradient(0deg, #ff7600 0%, #f39800 100%);
+}
+.page-transition[data-active="true"] { visibility: visible; opacity: 1; pointer-events: auto; }
+.page-transition-pattern {
+  position: absolute;
+  inset: 0;
+  background: url("/images/img_pattern_artdeco.png") left top / var(--campus-pattern-size) var(--campus-pattern-size) repeat;
+  opacity: .08;
+}
+.page-transition-emblem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+}
+.page-transition-crest { display: block; width: clamp(180px, 15.5vw, 240px); height: auto; }
+.page-transition-text {
+  font-family: "Campus Loading", sans-serif;
+  font-weight: 100;
+  font-size: clamp(44px, 4.1vw, 64px);
+  line-height: 1.5;
+  margin-top: .714286vw;
+}
+.page-transition[data-active="true"] .page-transition-text { animation: campus-loading-opacity 2.5s ease-in-out infinite; }
+.page-transition[data-active="true"] .page-transition-pattern { animation: campus-loading-drift 28s linear infinite; }
+@keyframes campus-loading-opacity { 0%, 100% { opacity: 0; } 30%, 70% { opacity: 1; } }
+@keyframes campus-loading-drift { to { background-position: var(--campus-pattern-size) var(--campus-pattern-size); } }
+@media (max-width: 767px) {
+  .page-transition-crest { width: clamp(144px, 38vw, 200px); }
+  .page-transition-text { font-size: clamp(38px, 10.2vw, 54px); margin-top: 2vw; }
+}
+@media (prefers-reduced-motion: reduce) { .page-transition { display: none; } }

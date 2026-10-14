@@ -9,6 +9,7 @@ import { displayWorkUser, findWorkUser, subscribeWorkUsers, workUsersVersion, ap
 import { docStatus, STORY_LABELS, storyKind } from './upstream/document-filter';
 import { ArrowLeft, UserRound } from 'lucide-react';
 import { useCatalog, type ChapterVoices } from '../catalog';
+import { usePageLoading } from '../page-loading';
 import { VoicePlayer } from './VoicePlayer';
 import { CompletionStats } from './CompletionStats';
 import { TranslationInput } from './TranslationInput';
@@ -31,6 +32,7 @@ export function WorkbenchPage() {
   const [auth, setAuth] = useState<Auth | null>(null);
   const [docs, setDocs] = useState<DocTask[]>([]), [error, setError] = useState('');
   const [loading, setLoading] = useState(true), [reload, setReload] = useState(0);
+  usePageLoading(loading);
   const [search, setSearch] = useState(''), [mine, setMine] = useState(false);
   const [category, setCategory] = useState('all'), [status, setStatus] = useState('all'), [sort, setSort] = useState('default');
   const [page, setPage] = useState(1);
@@ -173,6 +175,7 @@ export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voice
   useEffect(() => () => { playingAudio.current?.pause(); }, []);
   const [doc, setDoc] = useState<CsvTextInfo | null>(null), [sourceHash, setSourceHash] = useState(''), [auth, setAuth] = useState<Auth | null>(null), [task, setTask] = useState<DocTask | null>(null);
   const [notice, setNotice] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [role, setRole] = useState<TrackKey>('tr'), [search, setSearch] = useState(''), [onlyEmpty, setOnlyEmpty] = useState(false), [changed, setChanged] = useState(false);
+  usePageLoading((!doc || !auth) && !error);
   const [searchResults, setSearchResults] = useState<{ query: string; indices: Set<number> | null }>({ query: '', indices: null });
   const composingSearch = useRef(false);
   const [revising, setRevising] = useState(false), [remoteReady, setRemoteReady] = useState(false), [remoteLabel, setRemoteLabel] = useState('本地原文'), [draftAvailable, setDraftAvailable] = useState<string | null>(null);

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { usePageLoading } from "./page-loading";
 export interface Character {
   id: string;
   name: string;
@@ -75,6 +76,7 @@ export function useJson<T>(url: string) {
     data?: T;
     error?: string;
   }>({ url });
+  usePageLoading(result.url !== url || (!result.data && !result.error));
   useEffect(() => {
     const controller = new AbortController();
     let retry: ReturnType<typeof setTimeout>;

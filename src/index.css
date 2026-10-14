@@ -10,6 +10,7 @@
   --gold: #a77932;
   --line: #e4dfd5;
   --accent: #d7a04d;
+  --campus-pattern-size: 540px;
   font-synthesis: none;
   font-weight: 400;
   line-height: 1.6;
@@ -115,9 +116,9 @@ img {
   position: relative;
   padding: 16px 0;
   white-space: nowrap;
+  transition: color .2s ease;
 }
-.header nav a.active:after,
-.header nav a:hover:after {
+.header nav a::after {
   content: "";
   position: absolute;
   bottom: 5px;
@@ -125,7 +126,13 @@ img {
   right: 0;
   height: 2px;
   background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform .25s ease;
 }
+.header nav a.active::after,
+.header nav a:hover::after,
+.header nav a:focus-visible::after { transform: scaleX(1); }
 .edition {
   font-size: 10px;
   color: #847b6b;
@@ -858,7 +865,7 @@ footer small {
     font-size: 11px;
     padding: 12px 0 16px;
   }
-  .header nav a.active:after {
+  .header nav a::after {
     bottom: 0;
   }
   .section-title {
@@ -1219,8 +1226,8 @@ body {
 .library-icon { background: none; stroke-width: 1.7; }
 /* A low-contrast moving pattern, isolated from the page content. */
 body { background: #fff; isolation: isolate; }
-body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: #e6e0d5 url("/images/img_pattern_artdeco.png") repeat 0 0 / 540px 540px; opacity: .23; animation: campus-pattern-drift 100s linear infinite; }
-@keyframes campus-pattern-drift { to { background-position: 540px 540px; } }
+body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: #e6e0d5 url("/images/img_pattern_artdeco.png") repeat 0 0 / var(--campus-pattern-size) var(--campus-pattern-size); opacity: .23; animation: campus-pattern-drift 100s linear infinite; }
+@keyframes campus-pattern-drift { to { background-position: var(--campus-pattern-size) var(--campus-pattern-size); } }
 @media (prefers-reduced-motion: reduce) { body::before { animation: none; } }
 
 @media (min-width: 751px) { .character-hero { background-image: url("/images/official/classroom-desktop.jpg"); } }
