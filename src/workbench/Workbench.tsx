@@ -173,6 +173,8 @@ export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voice
   useEffect(() => () => { playingAudio.current?.pause(); }, []);
   const [doc, setDoc] = useState<CsvTextInfo | null>(null), [sourceHash, setSourceHash] = useState(''), [auth, setAuth] = useState<Auth | null>(null), [task, setTask] = useState<DocTask | null>(null);
   const [notice, setNotice] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [role, setRole] = useState<TrackKey>('tr'), [search, setSearch] = useState(''), [onlyEmpty, setOnlyEmpty] = useState(false), [changed, setChanged] = useState(false);
+  const [searchResults, setSearchResults] = useState<{ query: string; indices: Set<number> | null }>({ query: '', indices: null });
+  const composingSearch = useRef(false);
   const [revising, setRevising] = useState(false), [remoteReady, setRemoteReady] = useState(false), [remoteLabel, setRemoteLabel] = useState('本地原文'), [draftAvailable, setDraftAvailable] = useState<string | null>(null);
   const wrapper = useRef<Github | null>(null), baseRevision = useRef<Record<TrackKey, number>>({ tr: 0, pr: 0 }), storageKey = `campus-draft-v1:${scriptId}`;
   const source = useRef<CsvTextInfo | null>(null);
@@ -269,14 +271,29 @@ export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voice
     if (playingAudio.current !== audio) playingAudio.current?.pause();
     playingAudio.current = audio;
   }, []);
-  const rows = doc?.data.map((row, i) => ({ row, i })).filter(({ row }) => (!onlyEmpty || !row.trans.trim()) && (!search || [row.name, row.text, row.trans].some(t => t.includes(search))));
+  function applySearch(query: string, empty: boolean) {
+    if (!doc) return;
+    // Keep row identities until the next search/filter action, even when translations change.
+    const indices = query || empty ? new Set(doc.data.flatMap((row, i) =>
+      (!empty || !row.trans.trim()) && (!query || [row.name, row.text, row.trans].some(t => t.includes(query))) ? [i] : []
+    )) : null;
+    setSearchResults({ query, indices });
+  }
+  const rows = doc?.data.map((row, i) => ({ row, i })).filter(({ i }) => !searchResults.indices || searchResults.indices.has(i));
   return <section className="work-editor" aria-label="剧情翻译编辑器"><header><h2>剧情文本</h2><Login auth={auth} refresh={refreshAuth} /></header>
     <div className="work-toolbar"><span>{remoteLabel} · {doc?.data.filter(r => r.trans.trim()).length || 0} / {doc?.data.length || 0}</span><button disabled={!doc} onClick={() => doc && download(toCsvText(doc), scriptId + '.csv')}>导出 CSV</button><label className="work-button">导入 CSV<input type="file" accept=".csv,text/csv" hidden disabled={!doc || busy} onChange={e => { const file = e.target.files?.[0]; if (file && source.current) run(async () => { setDoc(mergeTranslation(source.current!, await file.text())); setChanged(true); setRemoteLabel('导入译文'); }); e.target.value = ''; }} /></label><button disabled={!doc || busy} onClick={() => run(async () => { if (doc) { downloadFile(await exportTxt(scriptId, toCsvText(doc)), scriptId + '.txt'); setNotice('TXT 已导出；未翻译的台词保留原文'); } })}>导出 TXT</button>{draftAvailable && <button onClick={() => download(draftAvailable, scriptId + '-旧草稿.csv')}>下载旧草稿</button>}</div>
     {auth?.canCollaborate && <div className="work-collaboration"><div className="work-toolbar"><select aria-label="协作工序" value={role} disabled={busy} onChange={e => { setRole(e.target.value as TrackKey); setRevising(false); setLengthConfirmation(false); }}><option value="tr">翻译</option><option value="pr">校对</option></select>{remoteReady && task && <><button disabled={busy || !auth?.user || task[role].state !== '待认领'} onClick={() => run(claim)}>认领{role === 'tr' ? '翻译' : '校对'}</button>{task[role].state === '完成' && !revising && <button disabled={busy || !auth?.user} onClick={() => setRevising(true)}>修订{role === 'tr' ? '翻译' : '校对'}</button>}</>}<button disabled={busy || !doc || remoteReady} onClick={() => run(connect)}>{remoteReady ? '已连接任务' : '连接协作任务'}</button>{task && <a href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/issues/${task.number}`} target="_blank" rel="noreferrer">任务 #{task.number}</a>}</div>
     {remoteReady && task && <><p>翻译：{task.tr.state} {displayWorkUser(task.tr.user) || '—'} / 校对：{task.pr.state} {displayWorkUser(task.pr.user) || '—'}</p><div className="work-toolbar">{(['ai', 'translated', 'proofread', 'draft'] as const).map((s, i) => <button disabled={busy} key={s} onClick={() => run(() => loadStage(s))}>{['载入机器译文', '载入翻译稿', '载入校对稿', '恢复远端草稿'][i]}</button>)}</div>{active?.blocked && <p>{active.blockMsg}</p>}</>}
     </div>}{error && <p className="work-error" role="alert">{error}</p>}{notice && <p className="work-notice" role="status">{notice}</p>}{busy && <p role="status">正在处理…</p>}
     {voices?.source_sha256 && sourceHash && voices.source_sha256 !== sourceHash && <p className="work-notice">原文版本与语音索引不一致，请更新索引后播放。</p>}
-    {doc ? <><div className="work-toolbar"><input aria-label="搜索台词" placeholder="搜索角色或台词" value={search} onChange={e => setSearch(e.target.value)} /><button aria-pressed={onlyEmpty} onClick={() => setOnlyEmpty(!onlyEmpty)}>只看未翻译</button><span>编辑自动保存到此浏览器；上传需点击「保存 GitHub 草稿」</span></div><div className="work-rows">{rows?.map(({ row, i }) => <EditorRow key={i} row={row} index={i} clips={voiceMap.get(i)?.clips} busy={busy} onChange={updateTranslation} onPlay={playVoice} />)}</div></> : !error && <p>正在读取原文…</p>}
+    {doc ? <><div className="work-toolbar">
+      <form className="work-editor-search" role="search" aria-label="剧情文本搜索" onSubmit={e => { e.preventDefault(); if (!composingSearch.current) applySearch(search.trim(), onlyEmpty); }}>
+        <input type="search" enterKeyHint="search" aria-label="搜索台词" placeholder="搜索角色、原文或译文" value={search} onChange={e => setSearch(e.target.value)}
+          onCompositionStart={() => { composingSearch.current = true; }} onCompositionEnd={() => { composingSearch.current = false; }}
+          onKeyDown={e => { if (e.key === 'Enter' && (composingSearch.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229)) e.preventDefault(); }} />
+      </form>
+      <button aria-pressed={onlyEmpty} onClick={() => { const next = !onlyEmpty; setOnlyEmpty(next); applySearch(searchResults.query, next); }}>只看未翻译</button><span>编辑自动保存到此浏览器；上传需点击「保存 GitHub 草稿」</span>
+    </div><div className="work-rows">{rows?.map(({ row, i }) => <EditorRow key={i} row={row} index={i} clips={voiceMap.get(i)?.clips} busy={busy} onChange={updateTranslation} onPlay={playVoice} />)}</div></> : !error && <p>正在读取原文…</p>}
     {doc && auth?.canCollaborate && <footer className="work-editor-actions">{remoteReady && task && <div className="work-toolbar"><button disabled={busy || active?.activeRole !== role} onClick={() => run(() => submit(false))}>保存 GitHub 草稿</button><button className="work-primary" disabled={busy || active?.activeRole !== role} onClick={() => run(() => submit(true))}>完成{role === 'tr' ? '翻译' : '校对'}</button></div>}    {lengthConfirmation && doc && <div className="work-length-confirm" role="alert">
       <strong>有 {longLines(doc.data).length} 行译文超过 21 字</strong>
       <p>{longLines(doc.data).map(w => `第 ${w.row} 条台词的第 ${w.line} 行（${w.length} 字）`).join('、')}</p>
