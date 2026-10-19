@@ -1,4 +1,5 @@
 # Dependencies, builds and tests
+.agent-local/
 node_modules/
 dist/
 dist-ssr/
