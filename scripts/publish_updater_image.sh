@@ -24,10 +24,11 @@ docker buildx inspect campus-builder --bootstrap
 # Check each target image before publishing the multi-platform manifest.
 for platform in $(printf '%s' "$platforms" | tr ',' ' '); do
     local_tag="$image:$version-check-$(printf '%s' "$platform" | tr '/' '-')"
-    docker buildx build --builder campus-builder --platform "$platform" \
+    docker buildx build --builder campus-builder --platform "$platform" --pull --no-cache \
         --build-arg "DEBIAN_MIRROR=$mirror" --build-arg "PIP_INDEX_URL=$pip_index" --file "$root/docker/Dockerfile.updater" --tag "$local_tag" --load "$root"
     sh "$root/scripts/check_updater_image.sh" "$local_tag" "$platform"
 done
+# Reuse the checked build layers when publishing.
 docker buildx build --builder campus-builder --platform "$platforms" \
     --build-arg "DEBIAN_MIRROR=$mirror" --build-arg "PIP_INDEX_URL=$pip_index" --file "$root/docker/Dockerfile.updater" \
     --tag "$image:$version" --push "$root"

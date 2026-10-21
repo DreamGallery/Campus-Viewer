@@ -6,6 +6,7 @@ docker run --rm -i --platform "$platform" --entrypoint python "$image" - <<'CHEC
 import importlib, json, pathlib, subprocess, tempfile, wave, struct
 from campus_story_index.audio_extract import encode_flac, encode_audio
 from campus_story_index.voice_encoding import encoding_settings
+subprocess.run(['python', '-m', 'pip', 'check'], check=True)
 with tempfile.TemporaryDirectory() as directory:
     wav = pathlib.Path(directory) / 'test.wav'
     pcm = b''.join(struct.pack('<hh', i * 7 % 32768, -(i * 5 % 32768)) for i in range(4800))

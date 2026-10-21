@@ -1,6 +1,8 @@
 # Docker 资源更新器
 
-使用 Docker Hub 镜像下载、解包游戏资源并上传到 R2，供 Cloudflare 网页读取。需要 Docker 和 Compose v2；当前镜像支持 `linux/amd64`。
+使用 Docker Hub 镜像下载、解包游戏资源并上传到 R2，供 Cloudflare 网页读取。需要 Docker 和 Compose v2。
+
+镜像：`dreamgallery/campus-r2-updater:cf20`，架构 `linux/amd64`。
 
 ## 配置与启动
 
