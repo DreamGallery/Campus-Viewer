@@ -14,7 +14,7 @@ import { VoicePlayer } from './VoicePlayer';
 import { CompletionStats } from './CompletionStats';
 import { TranslationInput } from './TranslationInput';
 import { ConfirmDialog } from './ConfirmDialog';
-import { longLines } from './text-format';
+import { hasTranslation, longLines, textBody } from './text-format';
 import { chapterVoiceMap, type VoiceLine } from './voice-map';
 import './workbench.css';
 
@@ -24,7 +24,7 @@ function download(text: string, name: string) {
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function saveBrowserDraft(storageKey: string, sourceHash: string, doc: CsvTextInfo) {
-  localStorage.setItem(storageKey, JSON.stringify({ sha256: sourceHash, csv: toCsvText(doc), savedAt: new Date().toISOString() }));
+  localStorage.setItem(storageKey, JSON.stringify({ sha256: sourceHash, csv: toCsvText(doc, { preserveTrailingNewlines: true }), savedAt: new Date().toISOString() }));
 }
 type RemoteStage = 'ai' | 'translated' | 'proofread' | 'draft';
 const REMOTE_LOAD_LABELS: Record<RemoteStage, string> = {
@@ -181,7 +181,7 @@ const EditorRow = memo(function EditorRow({ row, index, clips, busy, onChange, o
   row: CsvDataLine; index: number; clips?: VoiceLine['clips']; busy: boolean;
   onChange: (index: number, value: string) => void; onPlay: (audio: HTMLAudioElement) => void;
 }) {
-  return <article className="work-row"><div className="work-original"><Speaker name={row.name} index={index} choice={row.id === 'select'} /><p>{row.text.replace(/\\n/g, '\n')}</p>{clips && <VoicePlayer clips={clips} row={index + 1} onPlay={onPlay} />}</div><TranslationInput index={index} value={row.trans} disabled={busy} onChange={trans => onChange(index, trans)} /></article>;
+  return <article className="work-row"><div className="work-original"><Speaker name={row.name} index={index} choice={row.id === 'select'} /><p>{textBody(row.text)}</p>{clips && <VoicePlayer clips={clips} row={index + 1} onPlay={onPlay} />}</div><TranslationInput index={index} source={row.text} value={row.trans} disabled={busy} onChange={trans => onChange(index, trans)} /></article>;
 });
 export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voices?: ChapterVoices }) {
   useSyncExternalStore(subscribeWorkUsers, workUsersVersion);
@@ -278,12 +278,13 @@ export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voice
   const [lengthConfirmation, setLengthConfirmation] = useState(false);
   async function submit(complete: boolean, confirmed = false) {
     if (!doc || !wrapper.current) return;
+    const contentB64 = encode(toCsvText(doc, { validateLineBreaks: true }));
+    if (complete) { if (doc.data.some(r => !hasTranslation(r.trans))) throw new Error('还有未翻译的文本，请填写后再完成'); const errors = validateRowsHtmlTags(doc.data); if (errors.length) throw new Error('译文标签检查未通过：' + errors.join('；')); }
     if (complete && !confirmed && longLines(doc.data).length) { setLengthConfirmation(true); return; }
     setLengthConfirmation(false);
     const fresh = await freshTask(); const status = myStatusOf(fresh.tr, fresh.pr, auth!.user!.login, revising ? role : undefined);
     if (status.activeRole !== role) throw new Error(status.blockMsg || '请先认领此工序');
-    if (complete) { if (doc.data.some(r => !r.trans.trim())) throw new Error('还有未翻译的文本，请填写后再完成'); const errors = validateRowsHtmlTags(doc.data); if (errors.length) throw new Error('译文标签检查未通过：' + errors.join('；')); }
-    const opts = { fileId: scriptId, role, sourcePath: fresh.aiPath, contentB64: encode(toCsvText(doc)), operatorGithub: auth!.user!.login };
+    const opts = { fileId: scriptId, role, sourcePath: fresh.aiPath, contentB64, operatorGithub: auth!.user!.login };
     if (complete) {
       const result = await completeStage(wrapper.current, { ...opts, baseRevision: baseRevision.current[role] });
       try { await applyTrack(wrapper.current, fresh.number, role, { user: auth!.user!.login, state: '完成' }); }
@@ -306,7 +307,7 @@ export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voice
     if (!doc) return;
     // Keep row identities until the next search/filter action, even when translations change.
     const indices = query || empty ? new Set(doc.data.flatMap((row, i) =>
-      (!empty || !row.trans.trim()) && (!query || [row.name, row.text, row.trans].some(t => t.includes(query))) ? [i] : []
+      (!empty || !hasTranslation(row.trans)) && (!query || [row.name, row.text, row.trans].some(t => t.includes(query))) ? [i] : []
     )) : null;
     setSearchResults({ query, indices });
   }
@@ -315,7 +316,7 @@ export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voice
     {loadConfirmation && <ConfirmDialog title="替换当前译文？" confirmLabel="替换并载入" onCancel={() => setLoadConfirmation(null)} onConfirm={confirmLoad}>
       <p>{REMOTE_LOAD_LABELS[loadConfirmation]}会替换当前编辑内容，并覆盖此浏览器保存的草稿。需要保留当前内容，请先导出 CSV 备份。</p>
     </ConfirmDialog>}
-    <div className="work-toolbar"><span>{remoteLabel} · {doc?.data.filter(r => r.trans.trim()).length || 0} / {doc?.data.length || 0}</span><button disabled={!doc} onClick={() => doc && download(toCsvText(doc), scriptId + '.csv')}>导出 CSV</button><label className="work-button">导入 CSV<input type="file" accept=".csv,text/csv" hidden disabled={!doc || busy} onChange={e => { const file = e.target.files?.[0]; if (file && source.current) run(async () => { setDoc(mergeTranslation(source.current!, await file.text())); setChanged(true); setRemoteLabel('导入译文'); }); e.target.value = ''; }} /></label><button disabled={!doc || busy} onClick={() => run(async () => { if (doc) { downloadFile(await exportTxt(scriptId, toCsvText(doc)), scriptId + '.txt'); setNotice('TXT 已导出；未翻译的台词保留原文'); } })}>导出 TXT</button>{draftAvailable && <button onClick={() => download(draftAvailable, scriptId + '-旧草稿.csv')}>下载旧草稿</button>}</div>
+    <div className="work-toolbar"><span>{remoteLabel} · {doc?.data.filter(r => hasTranslation(r.trans)).length || 0} / {doc?.data.length || 0}</span><button disabled={!doc || busy} onClick={() => run(async () => { if (doc) download(toCsvText(doc, { validateLineBreaks: true }), scriptId + '.csv'); })}>导出 CSV</button><label className="work-button">导入 CSV<input type="file" accept=".csv,text/csv" hidden disabled={!doc || busy} onChange={e => { const file = e.target.files?.[0]; if (file && source.current) run(async () => { setDoc(mergeTranslation(source.current!, await file.text())); setChanged(true); setRemoteLabel('导入译文'); }); e.target.value = ''; }} /></label><button disabled={!doc || busy} onClick={() => run(async () => { if (doc) { downloadFile(await exportTxt(scriptId, toCsvText(doc, { validateLineBreaks: true })), scriptId + '.txt'); setNotice('TXT 已导出；未翻译的台词保留原文'); } })}>导出 TXT</button>{draftAvailable && <button onClick={() => download(draftAvailable, scriptId + '-旧草稿.csv')}>下载旧草稿</button>}</div>
     {auth?.canCollaborate && <div className="work-collaboration"><div className="work-toolbar"><select aria-label="协作工序" value={role} disabled={busy} onChange={e => { setRole(e.target.value as TrackKey); setRevising(false); setLengthConfirmation(false); }}><option value="tr">翻译</option><option value="pr">校对</option></select>{remoteReady && task && <><button disabled={busy || !auth?.user || task[role].state !== '待认领'} onClick={() => run(claim)}>认领{role === 'tr' ? '翻译' : '校对'}</button>{task[role].state === '完成' && !revising && <button disabled={busy || !auth?.user} onClick={() => setRevising(true)}>修订{role === 'tr' ? '翻译' : '校对'}</button>}</>}<button disabled={busy || !doc || remoteReady} onClick={() => run(connect)}>{remoteReady ? '已连接任务' : '连接协作任务'}</button>{task && <a href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/issues/${task.number}`} target="_blank" rel="noreferrer">任务 #{task.number}</a>}</div>
     {remoteReady && task && <><p>翻译：{task.tr.state} {displayWorkUser(task.tr.user) || '—'} / 校对：{task.pr.state} {displayWorkUser(task.pr.user) || '—'}</p><div className="work-toolbar">{(['ai', 'translated', 'proofread', 'draft'] as const).map(s => <button disabled={busy} key={s} onClick={() => changed ? setLoadConfirmation(s) : void run(() => loadStage(s))}>{REMOTE_LOAD_LABELS[s]}</button>)}</div>{active?.blocked && <p>{active.blockMsg}</p>}</>}
     </div>}{error && <p className="work-error" role="alert">{error}</p>}{notice && <p className="work-notice" role="status">{notice}</p>}{busy && <p role="status">正在处理…</p>}

@@ -1,9 +1,25 @@
 // CSV uses literal backslash-n; textarea uses real line breaks.
 export const editorText = (text: string) => text.replace(/\\n/g, '\n').replace(/\r\n?/g, '\n');
 export const csvText = (text: string) => text.replace(/\r\n?|\n/g, '\\n');
+export const textBody = (text: string) => editorText(text).replace(/(?:\n[^\S\n]*)+$/, '');
+export const hasTranslation = (text: string) => editorText(text).trim().length > 0;
+export const cleanTranslation = (text: string) => hasTranslation(text) ? csvText(textBody(text)) : '';
 export function lineLengths(text: string): number[] {
   // Count visible base text only, not markup or ruby annotations.
-  return editorText(text).replace(/<\/?(?:em|r)(?:\\?=[^>]*|\s[^>]*)?>/g, '').split('\n').map(line => Array.from(line).length);
+  return textBody(text.replace(/<\/?(?:em|r)(?:\\?=[^>]*|\s[^>]*)?>/g, '')).split('\n').map(line => Array.from(line).length);
+}
+export function lineBreakMismatch(source: string, translation: string) {
+  if (!hasTranslation(translation)) return null;
+  const expected = textBody(source).split('\n').length - 1;
+  const actual = textBody(translation).split('\n').length - 1;
+  return expected === actual ? null : { expected, actual };
+}
+export function validateLineBreaks(rows: { text: string; trans: string }[]) {
+  const errors = rows.flatMap((row, i) => {
+    const mismatch = lineBreakMismatch(row.text, row.trans);
+    return mismatch ? [`第 ${i + 1} 条台词的正文换行数量不一致（原文 ${mismatch.expected} 处，译文 ${mismatch.actual} 处）`] : [];
+  });
+  if (errors.length) throw new Error(errors.join('；'));
 }
 export function longLines(rows: { trans: string }[]) {
   return rows.flatMap((row, i) => lineLengths(row.trans).flatMap((length, line) => length > 21 ? [{ row: i + 1, line: line + 1, length }] : []));

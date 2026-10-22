@@ -9,6 +9,13 @@ test('duplicate dialogue is replaced independently without changing commands or 
  const raw='[message text=はい name=A clip=timing]\r\n[voice voice=x]\r\n[message text=はい name=A]\r\n';
  assert.equal(translatedScript(raw,[row('はい','好'),row('はい','是的')]),'[message text=好 name=A clip=timing]\r\n[voice voice=x]\r\n[message text=是的 name=A]\r\n');
 });
+test('TXT keeps source matching intact and strips only translated trailing empty lines', () => {
+ const raw = '[message text=原文\\n正文\\n\\n name=A]\r\n[message text=未訳\\n name=A]\r\n';
+ const rows = [row('原文\\n正文\\n\\n', '译文\n第二行\n\n'), row('未訳\\n', '\\n\\n')];
+ const before = JSON.stringify(rows);
+ assert.equal(translatedScript(raw, rows), '[message text=译文\\n第二行 name=A]\r\n[message text=未訳\\n name=A]\r\n');
+ assert.equal(JSON.stringify(rows), before);
+});
 test('choices, titles, narration, markup and newlines preserve script escaping', () => {
  const raw='[title title=原題]\n[choicegroup choices=[choice text=選択 id=1][choice text=取消 id=2]]\n[narration text=原文]';
  assert.equal(translatedScript(raw,[row('原題','标题','__title__'),row('選択','选择','','select'),row('取消','','','select'),row('原文','<r\\=Prima Stella>启明星</r>\n[注]=好','__narration__')]),'[title title=标题]\n[choicegroup choices=[choice text=选择 id=1][choice text=取消 id=2]]\n[narration text=<r\\=Prima Stella>启明星</r>\\n\\[注\\]\\=好]');

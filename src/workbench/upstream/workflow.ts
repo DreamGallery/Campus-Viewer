@@ -10,7 +10,7 @@ import { mergeScriptText } from '../script-text'
 // 一个人可两轨都接，也可两人分接。issue 的 assignees = 两轨认领人的并集（便于 GitHub 侧可见 + 我的任务过滤）。
 // 文件路径用阶段目录标记；旧 issue 的 <!-- path: data/... --> 仍可兼容。
 
-import { extractInfoFromCsvText, setCsvTranslator } from './csv'
+import { extractInfoFromCsvText, setCsvTranslator, toCsvText } from './csv'
 import { storyKind } from './document-filter'
 
 export const WORK_OWNER = import.meta.env.VITE_WORK_OWNER || 'chihya72'
@@ -275,6 +275,11 @@ function base64ToUtf8(value: string): string {
   )
 }
 
+function prepareCsvUpload(contentB64: string): string {
+  const doc = extractInfoFromCsvText(base64ToUtf8(contentB64))
+  return utf8ToBase64(toCsvText(doc, { validateLineBreaks: true }))
+}
+
 // GitHub login → 个人 ID / QQ 号。读的是仓库里的 users.json，不依赖前端已加载的映射
 export async function resolveOperator(
   wrapper: any,
@@ -497,6 +502,7 @@ export async function saveDraft(
   }
 ): Promise<{ draftRevision: number; baseRevision: number }> {
   const { fileId, role, sourcePath, operatorGithub } = opts
+  const contentB64 = prepareCsvUpload(opts.contentB64)
   const key = role === 'tr' ? 'translation' : 'proofread'
   const record = await fetchRecordForWrite(wrapper, fileId)
   const { operatorQq, operatorId } = await resolveOperator(
@@ -522,7 +528,7 @@ export async function saveDraft(
   await commitWorkFiles(
     wrapper,
     [
-      { path, content: opts.contentB64 },
+      { path, content: contentB64 },
       {
         path: `records/${fileId}.json`,
         content: utf8ToBase64(JSON.stringify(record, null, 2) + '\n'),
@@ -617,6 +623,7 @@ export async function completeStage(
   }
 ): Promise<{ directProofread: boolean; commitSha: string }> {
   const { fileId, role, sourcePath, operatorGithub, baseRevision } = opts
+  const contentB64 = prepareCsvUpload(opts.contentB64)
   const key = role === 'tr' ? 'translation' : 'proofread'
   const record = await fetchRecordForWrite(wrapper, fileId)
   const current = Number(record[key]?.revision || 0)
@@ -629,7 +636,7 @@ export async function completeStage(
   const { operatorQq, operatorId } = await resolveOperator(wrapper, operatorGithub)
   const translator = await completionTranslator(wrapper, opts, record, operatorId)
   const outputPath = completionPath(sourcePath, fileId, role)
-  const stamped = stampTranslator(opts.contentB64, completionCredit(translator, role === 'pr' ? operatorId : undefined))
+  const stamped = stampTranslator(contentB64, completionCredit(translator, role === 'pr' ? operatorId : undefined))
   const files: { path: string; content: string | null }[] = []
 
   // 草稿已晋升为正式稿，同一提交里删掉，避免下次打开又恢复出旧内容
@@ -684,7 +691,7 @@ export async function completeStage(
   if (directProofread)
     files.push({
       path: completionPath(sourcePath, fileId, 'tr'),
-      content: stampTranslator(opts.contentB64, completionCredit(operatorId)),
+      content: stampTranslator(contentB64, completionCredit(operatorId)),
     })
 
   // 校对完成时生成纯中文 TXT；原文缺失就跳过，不阻断提交

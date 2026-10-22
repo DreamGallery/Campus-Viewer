@@ -1,4 +1,4 @@
-import { csvText } from '../text-format';
+import { cleanTranslation, csvText, validateLineBreaks } from '../text-format';
 import Papa from 'papaparse';
 export interface CsvDataLine { id: string; name: string; text: string; trans: string; [key: string]: string }
 export interface CsvTextInfo { data: CsvDataLine[]; translator: string; jsonUrl: string; records: CsvDataLine[]; fields: string[] }
@@ -10,9 +10,11 @@ export function extractInfoFromCsvText(text: string): CsvTextInfo {
   if (!info) throw new Error('CSV 缺少 info 元数据');
   return { data: records.filter(r => r.id !== 'info' && r.id !== '译者' && r.text), translator: records.find(r => r.id === '译者')?.name || '', jsonUrl: info.name, records, fields: parsed.meta.fields! };
 }
-export function toCsvText(info: CsvTextInfo): string {
+export function toCsvText(info: CsvTextInfo, options: { preserveTrailingNewlines?: boolean; validateLineBreaks?: boolean } = {}): string {
+  if (options.validateLineBreaks) validateLineBreaks(info.data);
   let index = 0;
-  const rows: CsvDataLine[] = info.records.map(row => row.id === '译者' ? { ...row, name: info.translator } : row.id !== 'info' && row.text ? { ...row, trans: csvText(info.data[index++].trans) } : { ...row });
+  const translation = options.preserveTrailingNewlines ? csvText : cleanTranslation;
+  const rows: CsvDataLine[] = info.records.map(row => row.id === '译者' ? { ...row, name: info.translator } : row.id !== 'info' && row.text ? { ...row, trans: translation(info.data[index++].trans) } : { ...row });
   if (!rows.some(r => r.id === '译者')) rows.push({ id: '译者', name: info.translator, text: '', trans: '' });
   return Papa.unparse({ fields: info.fields, data: rows.map(row => info.fields.map(k => row[k] || '')) }, { newline: '\r\n' });
 }

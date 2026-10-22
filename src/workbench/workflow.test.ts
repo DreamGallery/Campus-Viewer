@@ -1,6 +1,6 @@
 import { completionStats } from './completion-stats';
 import { docFromIssue, setAssigneeUsers } from './upstream/workflow';
-import { csvText, editorText, lineLengths, longLines, insertFormat } from './text-format';
+import { cleanTranslation, csvText, editorText, hasTranslation, lineBreakMismatch, lineLengths, longLines, insertFormat, textBody, validateLineBreaks } from './text-format';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Github } from './github';
@@ -29,6 +29,72 @@ test('completion rejects stale revision before any commit',async()=>{const w=fak
 test('completion commits formal CSV and incremented record together',async()=>{const w=fake({translation:{revision:1,state:'进行中'},proofread:{revision:0},artifacts:{}});const result=await completeStage(w,{fileId:'test',role:'tr',sourcePath:'',contentB64:b64(csv),operatorGithub:'me',baseRevision:1});assert.equal(result.commitSha,'commit');assert.ok(w.written.some(f=>f.path==='translated_csv/test.csv'));const record=JSON.parse(Buffer.from(w.written.find(f=>f.path==='records/test.json')!.content!,'base64').toString());assert.equal(record.translation.revision,2);assert.equal(record.translation.state,'完成');});
 
 test('editor line breaks serialize as literal backslash-n without changing source',()=>{assert.equal(csvText('甲\n乙\r\n丙'), '甲\\n乙\\n丙');assert.equal(editorText('甲\\n乙'), '甲\n乙');const d=extractInfoFromCsvText(csv);d.data[0].trans='甲\n乙';const out=extractInfoFromCsvText(toCsvText(d));assert.equal(out.data[0].trans,'甲\\n乙');assert.equal(out.data[0].text,d.data[0].text);});
+test('trailing empty lines do not affect visible counts or body newline validation', () => {
+ for (const ending of ['\\n', '\\n\\n', '\n\n', '\r\n\r\n', '\r', '\n \t\n　']) {
+  const source = '原文\\n正文' + ending;
+  assert.equal(textBody(source), '原文\n正文');
+  assert.deepEqual(lineLengths('启明星' + ending), [3]);
+  assert.equal(lineBreakMismatch(source, '译文\n第二行\n'), null);
+  assert.equal(cleanTranslation('译文\n第二行' + ending), '译文\\n第二行');
+ }
+ assert.deepEqual(lineLengths('<r\\=Prima Stella>启明星</r>\\n\\n'), [3]);
+ assert.deepEqual(lineLengths('甲\\n\\n乙\\n'), [1, 0, 1]);
+ assert.deepEqual(lineBreakMismatch('原文\\n\\n正文\\n', '译文\\n第二行\\n\\n'), { expected: 2, actual: 1 });
+ assert.deepEqual(lineBreakMismatch('原文\\n正文\\n', '译文\\n'), { expected: 1, actual: 0 });
+ assert.deepEqual(lineBreakMismatch('原文\\n', '译文\\n第二行'), { expected: 0, actual: 1 });
+ assert.equal(cleanTranslation('  译文 \n\n'), '  译文 ');
+ for (const empty of ['', '\\n\\n', '\n \t\r\n']) {
+  assert.equal(hasTranslation(empty), false);
+  assert.equal(cleanTranslation(empty), '');
+  assert.equal(lineBreakMismatch('原文\\n正文', empty), null);
+ }
+});
+const newlineCsv = 'id,name,text,trans,extra\r\n000,A,原文\\n正文\\n\\n,译文\\n第二行\\n\\n,keep\r\n001,B,未訳\\n,\\n\\n,keep2\r\ninfo,test.txt,,,metadata\r\n译者,old,,,';
+test('browser drafts preserve unfinished newlines while output cleans only translations', () => {
+ const doc = extractInfoFromCsvText(newlineCsv), before = JSON.stringify(doc);
+ const draft = toCsvText(doc, { preserveTrailingNewlines: true });
+ const restored = mergeTranslation(doc, draft);
+ assert.deepEqual(restored.data, doc.data);
+ const output = extractInfoFromCsvText(toCsvText(doc, { validateLineBreaks: true }));
+ assert.deepEqual(output.data.map(row => row.trans), ['译文\\n第二行', '']);
+ assert.deepEqual(output.data.map(row => row.text), doc.data.map(row => row.text));
+ assert.equal(output.records[2].extra, 'metadata');
+ assert.equal(output.translator, 'old');
+ assert.equal(JSON.stringify(doc), before);
+ doc.data[0].trans = '译文\\n\\n';
+ assert.throws(() => toCsvText(doc, { validateLineBreaks: true }), /第 1 条.*原文 1 处，译文 0 处/);
+ assert.doesNotThrow(() => toCsvText(doc, { preserveTrailingNewlines: true }));
+ assert.throws(() => validateLineBreaks(doc.data), /正文换行数量不一致/);
+});
+test('GitHub draft and both completion roles normalize translations before writing', async t => {
+ t.mock.method(globalThis, 'fetch', async () => { throw new Error('No external TXT fetch in this test'); });
+ const doc = extractInfoFromCsvText(newlineCsv);
+ doc.data[1].trans = '翻译\\n\\n';
+ const contentB64 = b64(toCsvText(doc, { preserveTrailingNewlines: true }));
+ for (const role of ['tr', 'pr'] as const) {
+  for (const complete of [false, true]) {
+   const w = fake({ translation: { revision: 0, state: '完成', display_id: '原译者' }, proofread: { revision: 0 }, artifacts: {} });
+   const opts = { fileId: 'test', role, sourcePath: '', contentB64, operatorGithub: 'me', baseRevision: 0 };
+   if (complete) await completeStage(w, opts); else await saveDraft(w, opts);
+   const file = w.written.find(f => f.path.endsWith('/test.csv'))!;
+   const output = extractInfoFromCsvText(Buffer.from(file.content!, 'base64').toString());
+   assert.deepEqual(output.data.map(row => row.trans), ['译文\\n第二行', '翻译']);
+   assert.deepEqual(output.data.map(row => row.text), doc.data.map(row => row.text));
+   assert.equal(output.records[2].extra, 'metadata');
+  }
+ }
+});
+test('GitHub writes refuse body newline mismatches without writing any files', async () => {
+ const doc = extractInfoFromCsvText(newlineCsv);
+ doc.data[0].trans = '译文\\n\\n';
+ const contentB64 = b64(toCsvText(doc, { preserveTrailingNewlines: true }));
+ for (const complete of [false, true]) {
+  const w = fake({ translation: { revision: 0 }, artifacts: {} });
+  const opts = { fileId: 'test', role: 'tr' as const, sourcePath: '', contentB64, operatorGithub: 'me', baseRevision: 0 };
+  await assert.rejects(() => complete ? completeStage(w, opts) : saveDraft(w, opts), /正文换行数量不一致/);
+  assert.equal(w.written.length, 0);
+ }
+});
 test('length limit excludes formatting and ruby annotations, counts punctuation and Unicode',()=>{assert.deepEqual(lineLengths('<em\\=>文字</em>『<r\\=Prima Stella>启明星</r>』\\n你好！'),[7,3]);assert.equal(longLines([{trans:'字'.repeat(21)}]).length,0);assert.deepEqual(longLines([{trans:'字'.repeat(22)+'\\n短句'}]),[{row:1,line:1,length:22}]);assert.deepEqual(lineLengths('😀'),[1]);});
 test('format wraps selected text and returns editable selection',()=>{const em=insertFormat('前文字后',1,3,'em');assert.equal(em.text,'前<em\\=>文字</em>后');assert.equal(em.text.slice(em.start,em.end),'文字');assert.equal(insertFormat('启明星',0,3,'ruby','Prima Stella').text,'<r\\=Prima Stella>启明星</r>');assert.equal(insertFormat('',0,0,'em').text,'<em\\=>文字</em>');assert.throws(()=>insertFormat('',0,0,'ruby','a>b'));});
 

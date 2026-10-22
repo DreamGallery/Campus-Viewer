@@ -1,4 +1,4 @@
-import { csvText } from './text-format';
+import { cleanTranslation, csvText, hasTranslation } from './text-format';
 import type { CsvDataLine } from './upstream/csv';
 
 function scriptValue(value: string): string {
@@ -45,8 +45,8 @@ export function mergeScriptText(raw: string, rows: CsvDataLine[], nameDict: Read
     if (i < 0 && command[1] === 'title' && !pending.some(r => r.name === '__title__')) continue;
     if (i < 0) throw new Error(`原脚本与 CSV 不一致：${text.value.slice(0, 35)}`);
     used.add(i);
-    if (pending[i].trans.trim()) {
-      changes.push({ start: text.start, end: text.end, text: scriptValue(pending[i].trans) });
+    if (hasTranslation(pending[i].trans)) {
+      changes.push({ start: text.start, end: text.end, text: scriptValue(cleanTranslation(pending[i].trans)) });
     }
   }
   if (used.size !== pending.length) throw new Error(`有 ${pending.length - used.size} 条 CSV 原文未匹配到脚本，已停止 TXT 导出`);
