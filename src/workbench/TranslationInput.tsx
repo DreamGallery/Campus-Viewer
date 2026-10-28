@@ -33,7 +33,7 @@ export function TranslationInput({ value, source, index, disabled, onChange }: {
     </div>}
     <textarea ref={textarea} aria-label={`第 ${index + 1} 行译文`} aria-describedby={describedBy} placeholder="填写译文，回车换行" rows={3} value={text} disabled={disabled || !!ruby} onChange={e => onChange(csvText(e.target.value))} />
     {over.length > 0 && <small id={`line-warning-${index}`} className="translation-length-warning">{over.join('，')}，建议每行不超过 21 字</small>}
-    {mismatch && <small id={`line-break-warning-${index}`} className="translation-length-warning">正文换行数量需与原文一致：原文 {mismatch.expected} 处，译文 {mismatch.actual} 处</small>}
+    {mismatch && <small id={`line-break-warning-${index}`} className="translation-length-warning">译文行数不能超过原文：原文 {mismatch.expected + 1} 行，译文 {mismatch.actual + 1} 行</small>}
     {error && <small role="alert">{error}</small>}
   </div>;
 }

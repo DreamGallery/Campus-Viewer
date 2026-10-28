@@ -12,12 +12,12 @@ export function lineBreakMismatch(source: string, translation: string) {
   if (!hasTranslation(translation)) return null;
   const expected = textBody(source).split('\n').length - 1;
   const actual = textBody(translation).split('\n').length - 1;
-  return expected === actual ? null : { expected, actual };
+  return actual <= expected ? null : { expected, actual };
 }
 export function validateLineBreaks(rows: { text: string; trans: string }[]) {
   const errors = rows.flatMap((row, i) => {
     const mismatch = lineBreakMismatch(row.text, row.trans);
-    return mismatch ? [`第 ${i + 1} 条台词的正文换行数量不一致（原文 ${mismatch.expected} 处，译文 ${mismatch.actual} 处）`] : [];
+    return mismatch ? [`第 ${i + 1} 条台词的译文行数超过原文（原文 ${mismatch.expected + 1} 行，译文 ${mismatch.actual + 1} 行）`] : [];
   });
   if (errors.length) throw new Error(errors.join('；'));
 }

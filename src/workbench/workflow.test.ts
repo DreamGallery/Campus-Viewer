@@ -39,8 +39,8 @@ test('trailing empty lines do not affect visible counts or body newline validati
  }
  assert.deepEqual(lineLengths('<r\\=Prima Stella>启明星</r>\\n\\n'), [3]);
  assert.deepEqual(lineLengths('甲\\n\\n乙\\n'), [1, 0, 1]);
- assert.deepEqual(lineBreakMismatch('原文\\n\\n正文\\n', '译文\\n第二行\\n\\n'), { expected: 2, actual: 1 });
- assert.deepEqual(lineBreakMismatch('原文\\n正文\\n', '译文\\n'), { expected: 1, actual: 0 });
+ assert.equal(lineBreakMismatch('原文\\n\\n正文\\n', '译文\\n第二行\\n\\n'), null);
+ assert.equal(lineBreakMismatch('原文\\n正文\\n', '译文\\n'), null);
  assert.deepEqual(lineBreakMismatch('原文\\n', '译文\\n第二行'), { expected: 0, actual: 1 });
  assert.equal(cleanTranslation('  译文 \n\n'), '  译文 ');
  for (const empty of ['', '\\n\\n', '\n \t\r\n']) {
@@ -62,13 +62,17 @@ test('browser drafts preserve unfinished newlines while output cleans only trans
  assert.equal(output.translator, 'old');
  assert.equal(JSON.stringify(doc), before);
  doc.data[0].trans = '译文\\n\\n';
- assert.throws(() => toCsvText(doc, { validateLineBreaks: true }), /第 1 条.*原文 1 处，译文 0 处/);
+ assert.equal(extractInfoFromCsvText(toCsvText(doc, { validateLineBreaks: true })).data[0].trans, '译文');
+ assert.doesNotThrow(() => validateLineBreaks(doc.data));
+ doc.data[0].trans = '译文\\n第二行\\n第三行\\n';
+ assert.throws(() => toCsvText(doc, { validateLineBreaks: true }), /第 1 条.*原文 2 行，译文 3 行/);
  assert.doesNotThrow(() => toCsvText(doc, { preserveTrailingNewlines: true }));
- assert.throws(() => validateLineBreaks(doc.data), /正文换行数量不一致/);
+ assert.throws(() => validateLineBreaks(doc.data), /译文行数超过原文/);
 });
-test('GitHub draft and both completion roles normalize translations before writing', async t => {
+test('GitHub draft and both completion roles accept fewer translated lines and normalize before writing', async t => {
  t.mock.method(globalThis, 'fetch', async () => { throw new Error('No external TXT fetch in this test'); });
  const doc = extractInfoFromCsvText(newlineCsv);
+ doc.data[0].trans = '合并译文\\n\\n';
  doc.data[1].trans = '翻译\\n\\n';
  const contentB64 = b64(toCsvText(doc, { preserveTrailingNewlines: true }));
  for (const role of ['tr', 'pr'] as const) {
@@ -78,21 +82,29 @@ test('GitHub draft and both completion roles normalize translations before writi
    if (complete) await completeStage(w, opts); else await saveDraft(w, opts);
    const file = w.written.find(f => f.path.endsWith('/test.csv'))!;
    const output = extractInfoFromCsvText(Buffer.from(file.content!, 'base64').toString());
-   assert.deepEqual(output.data.map(row => row.trans), ['译文\\n第二行', '翻译']);
+   assert.deepEqual(output.data.map(row => row.trans), ['合并译文', '翻译']);
    assert.deepEqual(output.data.map(row => row.text), doc.data.map(row => row.text));
    assert.equal(output.records[2].extra, 'metadata');
   }
  }
 });
-test('GitHub writes refuse body newline mismatches without writing any files', async () => {
+test('GitHub writes refuse translations exceeding source line count without writing any files', async () => {
  const doc = extractInfoFromCsvText(newlineCsv);
- doc.data[0].trans = '译文\\n\\n';
+ doc.data[0].trans = '译文\\n第二行\\n第三行\\n';
  const contentB64 = b64(toCsvText(doc, { preserveTrailingNewlines: true }));
  for (const complete of [false, true]) {
   const w = fake({ translation: { revision: 0 }, artifacts: {} });
   const opts = { fileId: 'test', role: 'tr' as const, sourcePath: '', contentB64, operatorGithub: 'me', baseRevision: 0 };
-  await assert.rejects(() => complete ? completeStage(w, opts) : saveDraft(w, opts), /正文换行数量不一致/);
+  await assert.rejects(() => complete ? completeStage(w, opts) : saveDraft(w, opts), /译文行数超过原文/);
   assert.equal(w.written.length, 0);
+ }
+});
+test('joining source lines still warns when the translated line exceeds 21 characters', () => {
+ const source = '原文\\n正文\\n';
+ for (const length of [21, 22]) {
+  const trans = '字'.repeat(length) + '\\n\\n';
+  assert.equal(lineBreakMismatch(source, trans), null);
+  assert.deepEqual(longLines([{ trans }]), length === 21 ? [] : [{ row: 1, line: 1, length: 22 }]);
  }
 });
 test('length limit excludes formatting and ruby annotations, counts punctuation and Unicode',()=>{assert.deepEqual(lineLengths('<em\\=>文字</em>『<r\\=Prima Stella>启明星</r>』\\n你好！'),[7,3]);assert.equal(longLines([{trans:'字'.repeat(21)}]).length,0);assert.deepEqual(longLines([{trans:'字'.repeat(22)+'\\n短句'}]),[{row:1,line:1,length:22}]);assert.deepEqual(lineLengths('😀'),[1]);});
