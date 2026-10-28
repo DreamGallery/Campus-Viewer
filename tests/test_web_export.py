@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from campus_story_index.web_assets import decode_header, image_requests, display_size
+from campus_story_index.web_assets import decode_header, image_requests, display_ratio
 from campus_story_index.web_export import build, canonical_directory_entries
 from campus_story_index.io import atomic_write
 
@@ -123,11 +123,11 @@ class WebExportTests(unittest.TestCase):
                 self.assertEqual(rows[0]['group_images'][0]['aspect_ratio'], 4)
 
     def test_event_banner_ratio_excludes_other_banner_types(self):
-        self.assertEqual(display_size('img_general_event_story_event-story-001-banner', (1024, 256)), (1024, 341))
-        self.assertEqual(display_size('img_general_event_4am_hski-banner-01', (1024, 256)), (1024, 341))
+        self.assertEqual(display_ratio('img_general_event_story_event-story-001-banner'), 3)
+        self.assertEqual(display_ratio('img_general_event_4am_hski-banner-01'), 3)
         for suffix in ['story-banner', 'reward-banner', 'rev-banner']:
-            self.assertIsNone(display_size('img_general_event_test-' + suffix, (512, 128)))
-            self.assertIsNone(display_size('img_general_event_test-' + suffix + '-01', (512, 128)))
+            self.assertIsNone(display_ratio('img_general_event_test-' + suffix))
+            self.assertIsNone(display_ratio('img_general_event_test-' + suffix + '-01'))
 
     def test_numbered_campaign_cover_uses_linked_header_and_preserves_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -155,7 +155,8 @@ class WebExportTests(unittest.TestCase):
             atomic_write(root/'voices.json', {'sources': {'catalog_sha256': hashlib.sha256((root/'catalog.json').read_bytes()).hexdigest()}, 'scripts': []})
             small = {'name': banner, 'path': 'images/small.webp', 'width': 512, 'height': 128}
             large = {'name': header, 'path': 'images/header.webp', 'width': 1600, 'height': 900}
-            for images, expected, ratio in [([small, large], 'header', 16/9), ([small], 'small', 4)]:
+            native_banner = {'name': 'img_general_event_4am_hski-banner-01', 'path': 'images/native.webp', 'width': 1024, 'height': 256}
+            for images, expected, ratio in [([small, large], 'header', 16/9), ([small], 'small', 4), ([small, native_banner], 'native', 3)]:
                 atomic_write(root/'assets.json', {'images': images})
                 result = build(*args)
                 folder = root/'output/builds'/result['build_id']
@@ -295,10 +296,10 @@ class WebExportTests(unittest.TestCase):
         self.assertEqual(chosen,{'shared':'0'})
         self.assertEqual(sources['shared'],['0','1'])
 
-    def test_toolkit_card_dimensions(self):
-        self.assertEqual(display_size('img_general_cidol-test_0-full'), (1440, 2560))
-        self.assertEqual(display_size('img_general_csprt-test_full'), (2560, 1440))
-        self.assertIsNone(display_size('img_chr_test_00-full'))
+    def test_card_display_proportions(self):
+        self.assertEqual(display_ratio('img_general_cidol-test_0-full'), 9 / 16)
+        self.assertEqual(display_ratio('img_general_csprt-test_full'), 16 / 9)
+        self.assertIsNone(display_ratio('img_chr_test_00-full'))
 
     def test_image_plan_uses_exact_card_variants(self):
         result=image_requests({'characters':[{'id':'test','is_playable':True}],

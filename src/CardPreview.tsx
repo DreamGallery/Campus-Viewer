@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import { X } from "lucide-react";
 import type { Entry } from "./catalog";
 
@@ -14,8 +14,9 @@ export default function CardPreview({
   zoomable?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [selected, setSelected] = useState(0);
-  const selectedAspectRatio = imageAspectRatio ?? images[selected].aspect_ratio;
+  const [selected, setSelected] = useState<number | null>(null);
+  const selectedImage = selected === null ? undefined : images[selected];
+  const selectedAspectRatio = imageAspectRatio ?? selectedImage?.aspect_ratio;
   const PreviewContainer = zoomable ? "button" : "div";
   return (
     <>
@@ -25,29 +26,34 @@ export default function CardPreview({
           gridTemplateColumns: `repeat(${images.length}, minmax(0, 1fr))`,
         }}
       >
-        {images.map((image, index) => (
-          <PreviewContainer
-            key={image.url}
-            className={`card-preview${zoomable ? "" : " card-preview-static"}`}
-            aria-label={zoomable ? `放大 ${title} ${image.label}` : undefined}
-            onClick={zoomable ? () => {
-              setSelected(index);
-              dialog.current?.showModal();
-            } : undefined}
-          >
-            <img
-              style={{aspectRatio: imageAspectRatio ?? (image.preview_crop ? 3 : image.aspect_ratio || undefined), objectFit: imageAspectRatio ? "fill" : image.preview_crop ? "cover" : undefined, objectPosition: image.preview_crop || undefined}} src={image.url}
-              alt={`${title} ${image.label}`}
-              loading="lazy"
-            />
-            {images.length > 1 && <span>{image.label}</span>}
-          </PreviewContainer>
-        ))}
+        {images.map((image, index) => {
+          const aspectRatio = imageAspectRatio ?? (image.preview_crop ? 3 : image.aspect_ratio);
+          return (
+            <PreviewContainer
+              key={image.url}
+              className={`card-preview${zoomable ? "" : " card-preview-static"}`}
+              style={{ "--card-preview-ratio": aspectRatio || 16 / 9 } as CSSProperties}
+              aria-label={zoomable ? `放大 ${title} ${image.label}` : undefined}
+              onClick={zoomable ? () => {
+                setSelected(index);
+                dialog.current?.showModal();
+              } : undefined}
+            >
+              <img
+                style={{aspectRatio: aspectRatio || undefined, objectFit: !imageAspectRatio && image.preview_crop ? "cover" : "fill", objectPosition: image.preview_crop || undefined}} src={image.url}
+                alt={`${title} ${image.label}`}
+                loading="lazy"
+              />
+              {images.length > 1 && <span>{image.label}</span>}
+            </PreviewContainer>
+          );
+        })}
       </div>
       {zoomable && <dialog
         ref={dialog}
         className="card-lightbox"
         aria-label={`${title} 卡面预览`}
+        onClose={() => setSelected(null)}
         onClick={(event) => {
           if (event.target === event.currentTarget) dialog.current?.close();
         }}
@@ -62,11 +68,12 @@ export default function CardPreview({
             <X />
           </button>
         </div>
-        <img
-          style={{aspectRatio: selectedAspectRatio || undefined, width: selectedAspectRatio ? `min(100%, ${75 * selectedAspectRatio}dvh)` : undefined, objectFit: imageAspectRatio ? "fill" : undefined}} src={images[selected].url}
-          alt={`${title} ${images[selected].label}`}
-        />
-        {images.length > 1 && (
+        {selectedImage && <img
+          style={{aspectRatio: selectedAspectRatio || undefined, width: selectedAspectRatio ? `min(100%, ${75 * selectedAspectRatio}dvh)` : undefined, objectFit: imageAspectRatio ? "fill" : undefined}} src={selectedImage.url}
+          alt={`${title} ${selectedImage.label}`}
+          decoding="async"
+        />}
+        {selectedImage && images.length > 1 && (
           <div className="lightbox-stages">
             {images.map((image, index) => (
               <button

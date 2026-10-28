@@ -12,7 +12,7 @@ import tempfile
 import subprocess
 import yaml
 from .io import atomic_write
-from .web_assets import event_cover_candidates
+from .web_assets import display_ratio, event_cover_candidates
 from .pending_text import filename_hints
 
 
@@ -175,7 +175,7 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
             if available:
                 name = max(available, key=lambda key: asset_info[key].get('width', 0) * asset_info[key].get('height', 0))
             info = asset_info.get(name, {})
-            ratio = info['width'] / info['height'] if info.get('height') else None
+            ratio = display_ratio(name) or (info['width'] / info['height'] if info.get('height') else None)
             return [{'url': assets[name], 'label': '活动封面', 'aspect_ratio': ratio, 'preview_crop': '50% 42%' if re.search(r'-story-header(?:-\d+)?$', name) else None}] if name in assets else []
         if group['kind'] == 'idol_card':
             candidates = [(f'img_general_{name}_{stage}-full', f'阶段 {stage + 1}') for stage in (0, 1)]

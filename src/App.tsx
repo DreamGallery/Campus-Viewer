@@ -407,7 +407,8 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
   if (!path) return <div className="empty-state">当前角色暂无收录剧情。</div>;
   if (!entries) return <Feedback error={error} />;
   const totalScripts = new Set(entries.map((e) => e.script_id)).size;
-  const totalPages = Math.max(1, Math.ceil(groups.length / 12));
+  const pageSize = root === "character" ? 6 : 12;
+  const totalPages = Math.max(1, Math.ceil(groups.length / pageSize));
   const current = Math.min(page, totalPages);
   return (
     <>
@@ -523,7 +524,7 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
         </div>
       ) : (
         <div className={`story-grid ${root === "event" ? "event-grid" : root === "character" ? "character-grid" : ""}`}>
-          {groups.slice((current - 1) * 12, current * 12).map((g) => (
+          {groups.slice((current - 1) * pageSize, current * pageSize).map((g) => (
             <article
               className={`story-group ${g.images.length ? "has-art" : ""}`}
               key={g.id}

@@ -104,15 +104,14 @@ def is_event_banner(name):
     return bool(re.fullmatch(r"img_general.*event.*(?<!story)(?<!reward)(?<!rev)-banner(?:-\d+)?", name))
 
 
-def display_size(name, source_size=None):
-    # HatsuboshiToolkit origin/main src/image_process.py image_scale.
+def display_ratio(name):
+    # Game display proportions; keep the stored texture at its native dimensions.
     if name.startswith('img_general_cidol-') and name.endswith('-full'):
-        return (1440, 2560)
+        return 9 / 16
     if name.startswith('img_general_csprt-') and name.endswith('_full'):
-        return (2560, 1440)
-    if is_event_banner(name) and source_size:
-        w, h = source_size
-        return (w, int(w / 3 + 0.5)) if w / h > 3 else (int(h * 3 + 0.5), h)
+        return 16 / 9
+    if is_event_banner(name):
+        return 3
     return None
 
 
@@ -125,7 +124,8 @@ def extract_one(item, url_format, cache, output):
     if result['status'] == 'failed':
         return result
     # Content-addressed output: updates cannot replace assets used by old indexes.
-    recipe = "banner-3to1-v1" if is_event_banner(name) else "stretch-v2" if display_size(name) else "trim-v1"
+    native = display_ratio(name) is not None
+    recipe = "native-v1" if native else "trim-v1"
     target = output / f"{name}.{item['md5']}.{recipe}.webp"
     if target.exists():
         target.chmod(0o644)
@@ -146,15 +146,11 @@ def extract_one(item, url_format, cache, output):
         raise ValueError('Expected named image missing')
     # Prefer a Sprite's cropped image where both Sprite and Texture2D exist.
     image = candidates[-1].image
-    size = display_size(name, image.size)
-    if size:
-        from PIL import Image
-        image = image.resize(size, Image.Resampling.LANCZOS)
-    elif image.mode == 'RGBA':
-        bounds = image.getchannel('A').getbbox()
-        if bounds:
-            image = image.crop(bounds)
-    if not size:
+    if not native:
+        if image.mode == 'RGBA':
+            bounds = image.getchannel('A').getbbox()
+            if bounds:
+                image = image.crop(bounds)
         image.thumbnail((1600, 2000))
     output.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(dir=output, suffix='.webp')

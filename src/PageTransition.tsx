@@ -29,16 +29,22 @@ function waitForImage(image: HTMLImageElement, signal: AbortSignal): Promise<voi
   });
 }
 
-function waitForFirstScreen(content: HTMLElement | null, signal: AbortSignal) {
+function waitForPageImages(content: HTMLElement | null, signal: AbortSignal) {
   const visible = (element: Element) => {
     const rect = element.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0 && rect.top < innerHeight && rect.bottom > 0
       && rect.left < innerWidth && rect.right > 0;
   };
-  const images = [...content?.querySelectorAll("img") || []].filter(visible);
+  const images = [...content?.querySelectorAll("img") || []].filter(image =>
+    !image.closest("dialog:not([open])") && (visible(image)
+      || image.matches(".character-hero img, .roster img, .card-preview img")));
+  // Include artwork on the current page below the fold. Lazy images would otherwise
+  // start loading only after the curtain has gone and the reader scrolls to them.
+  for (const image of images) {
+    if (image.loading === "lazy") image.loading = "eager";
+  }
   // The character introduction uses a CSS classroom background rather than an <img>.
   for (const element of content?.querySelectorAll(".character-hero") || []) {
-    if (!visible(element)) continue;
     const url = /url\(["']?(.*?)["']?\)/.exec(getComputedStyle(element).backgroundImage)?.[1];
     if (url) { const image = new Image(); image.src = url; images.push(image); }
   }
@@ -104,7 +110,7 @@ function LoadingCurtain({ pending }: { pending: number }) {
         frame = 0;
         const controller = new AbortController();
         images = controller;
-        void waitForFirstScreen(content, controller.signal).then(() => {
+        void waitForPageImages(content, controller.signal).then(() => {
           if (!controller.signal.aborted && !pendingRef.current) reveal();
         });
       });

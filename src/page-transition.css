@@ -21,7 +21,7 @@
 .page-transition[data-active="true"] { visibility: visible; opacity: 1; pointer-events: auto; }
 .page-transition-pattern {
   position: absolute;
-  inset: 0;
+  inset: calc(-1 * var(--campus-pattern-size)) 0 0 calc(-1 * var(--campus-pattern-size));
   background: url("/images/img_pattern_artdeco.png") left top / var(--campus-pattern-size) var(--campus-pattern-size) repeat;
   opacity: .08;
 }
@@ -40,9 +40,8 @@
   margin-top: .714286vw;
 }
 .page-transition[data-active="true"] .page-transition-text { animation: campus-loading-opacity 2.5s ease-in-out infinite; }
-.page-transition[data-active="true"] .page-transition-pattern { animation: campus-loading-drift 28s linear infinite; }
+.page-transition[data-active="true"] .page-transition-pattern { animation: campus-pattern-drift 28s linear infinite; will-change: transform; }
 @keyframes campus-loading-opacity { 0%, 100% { opacity: 0; } 30%, 70% { opacity: 1; } }
-@keyframes campus-loading-drift { to { background-position: var(--campus-pattern-size) var(--campus-pattern-size); } }
 @media (max-width: 767px) {
   .page-transition-crest { width: clamp(144px, 38vw, 200px); }
   .page-transition-text { font-size: clamp(38px, 10.2vw, 54px); margin-top: 2vw; }

@@ -3,7 +3,8 @@
 .theme-switch { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; }
 .theme-switch button { display: flex; align-items: center; gap: 5px; padding: 6px 8px; min-height: 32px; border: 1px solid transparent; border-radius: 5px; font-size: 11px; white-space: nowrap; }
 .theme-switch button[aria-pressed="true"] { background: #f1e7d7; border-color: #cfb98f; color: #795722; }
-.header nav { min-width: 0; overflow-x: auto; flex-shrink: 1; }
+.header nav { min-width: 0; overflow-x: auto; flex-shrink: 1; scrollbar-width: none; }
+.header nav::-webkit-scrollbar { display: none; }
 .header nav a { flex-shrink: 0; white-space: nowrap; }
 @media (max-width: 1500px) { .header-tools .edition { display: none; } .header { gap: 18px; } }
 @media (max-width: 700px) { .header-tools { position: absolute; right: 5%; top: 20px; } .theme-switch button { padding: 7px; } .theme-switch span { display: none; } }
