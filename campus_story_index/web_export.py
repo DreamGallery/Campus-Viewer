@@ -203,6 +203,7 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
     entries_by_id = {entry['id']: entry for entry in catalog['entries']}
     shards = defaultdict(list)
     chapters = defaultdict(list)
+    canonical_rows = {}
     for e in catalog['entries']:
         available = [groups[g] for g in e['group_ids'] if g in groups]
         available.sort(key=lambda g: (priorities.index(g['kind']), g['order'], g['id']))
@@ -232,6 +233,8 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
                 directory_item['character_ids'] = sorted(set(item['character_ids']) | {cid for entry in related for cid in (entry['character_ids'] or entry.get('inferred_character_ids', []))})
             if category == 'character' and e['category_id'] not in ('character.dearness', 'character.idol_card', 'character.training_story'):
                 directory_item.update(group_id=e['category_id'], group_title=categories[e['category_id']]['name'], group_order=0)
+            if deduplicate:
+                canonical_rows[e['script_id']] = directory_item
             shards[category].append(directory_item)
             if category == 'character':
                 for ident in directory_item['character_ids']:
@@ -247,7 +250,7 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
             continue
         source_entries = entries_by_script[ident]
         pending = script.get('metadata_status') == 'unlinked_masterdata' or all(not e.get('source_record_id') or e['source_record_id'].startswith('AssetDownload:') for e in source_entries)
-        row = variants[0]
+        row = canonical_rows.get(ident, variants[0])
         hints = filename_hints(ident, [c['id'] for c in catalog['characters']])
         previews = row['group_images']
         if pending:

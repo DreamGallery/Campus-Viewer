@@ -336,7 +336,8 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
   const resetFilters = () => {
     setSearch(""); setTab("all"); setSelectedCharacters([]); setRarities([]); setAttributes([]); setPage(1);
   };
-  const categories = catalog.categories.filter((c) => c.parent_id === root);
+  const categories = catalog.categories.filter((c) => c.parent_id === root)
+    .sort((a, b) => Number(b.id === "character.idol_card") - Number(a.id === "character.idol_card"));
   const query = normalize(search);
   const groups = useMemo(() => {
     const map = new Map<
@@ -394,7 +395,14 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
       if (right === null) return -1;
       return sort.endsWith("newest") ? right - left : left - right;
     });
-    return result;
+    if (root === "character") result.sort((a, b) =>
+      Number(b.items[0].category_id === "character.idol_card") - Number(a.items[0].category_id === "character.idol_card"));
+    let storyNumber = 0;
+    let cardNumber = 0;
+    return result.map(group => ({
+      ...group,
+      number: root === "character" && group.items[0].category_id === "character.idol_card" ? ++cardNumber : ++storyNumber,
+    }));
   }, [entries, tab, query, catalog.characters, catalog.filter_characters, root, sort, selectedCharacters, rarities, attributes]);
   if (!path) return <div className="empty-state">当前角色暂无收录剧情。</div>;
   if (!entries) return <Feedback error={error} />;
@@ -515,7 +523,7 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
         </div>
       ) : (
         <div className={`story-grid ${root === "event" ? "event-grid" : root === "character" ? "character-grid" : ""}`}>
-          {groups.slice((current - 1) * 12, current * 12).map((g, i) => (
+          {groups.slice((current - 1) * 12, current * 12).map((g) => (
             <article
               className={`story-group ${g.images.length ? "has-art" : ""}`}
               key={g.id}
@@ -528,7 +536,7 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
                   {g.images.length === 0 && (
                     <div className="group-art typographic-art">
                       <span>
-                        {String((current - 1) * 12 + i + 1).padStart(2, "0")}
+                        {String(g.number).padStart(2, "0")}
                       </span>
                       <BookOpen size={28} />
                     </div>

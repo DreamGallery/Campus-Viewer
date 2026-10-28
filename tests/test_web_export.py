@@ -193,6 +193,45 @@ class WebExportTests(unittest.TestCase):
         self.assertEqual(chosen[base['script_id']], 'step')
         self.assertEqual(len(sources[base['script_id']]), 3)
 
+    def test_updates_use_dearness_step_regardless_of_source_order(self):
+        for reverse in (False, True):
+            with self.subTest(reverse=reverse), tempfile.TemporaryDirectory() as directory:
+                root, args = self.fixture(directory)
+                catalog = json.loads((root/'catalog.json').read_text())
+                catalog['categories'] = [
+                    {'id': 'character', 'name': '角色剧情', 'parent_id': None},
+                    {'id': 'character.dearness', 'name': '亲密度剧情', 'parent_id': 'character'}]
+                catalog['groups'] = [
+                    {'id': 'character:atbm', 'kind': 'character', 'title': '雨夜 燕', 'order': 0, 'image_asset_id': None},
+                    {'id': 'step4', 'kind': 'story_group', 'title': 'STEP4', 'order': 4,
+                     'parent_id': 'character:atbm', 'image_asset_id': None}]
+                script_id = 'adv_dear_atbm_037'
+                catalog['scripts'][0].update(id=script_id, csv_path=f'CSV/dear/atbm/{script_id}.csv')
+                for entry, source in zip(catalog['entries'], ('Story:dear37', 'CharacterDearnessLevel:atbm37')):
+                    entry.update(id=source + '/advAssetId', script_id=script_id, title='第37話',
+                                 category_id='character.dearness', character_ids=['atbm'],
+                                 source_record_id=source, group_ids=['character:atbm'])
+                catalog['entries'][1]['group_ids'].append('step4')
+                if reverse:
+                    catalog['entries'].reverse()
+                atomic_write(root/'catalog.json', catalog)
+                atomic_write(root/'voices.json', {
+                    'sources': {'catalog_sha256': hashlib.sha256((root/'catalog.json').read_bytes()).hexdigest()},
+                    'scripts': []})
+                result = build(*args)
+                folder = root/'output/builds'/result['build_id']
+                rows = json.loads((folder/'lists/character-atbm.json').read_text())
+                updates = json.loads((folder/'updates.json').read_text())['items']
+                self.assertEqual(len(rows), 1)
+                self.assertEqual(len(updates), 1)
+                self.assertEqual(updates[0]['entry_id'], rows[0]['id'])
+                for field in ('group_id', 'group_title', 'category_id', 'character_ids'):
+                    self.assertEqual(updates[0][field], rows[0][field])
+                self.assertEqual(updates[0]['group_title'], 'STEP4')
+                self.assertFalse(updates[0]['pending'])
+                chapter = json.loads((folder/'chapters'/f'{script_id}.json').read_text())
+                self.assertEqual({entry['group_id'] for entry in chapter['entries']}, {'character:atbm', 'step4'})
+
     def test_character_duplicates_prefer_dearness_and_explicit_modes(self):
         groups={'step':{'kind':'story_group'},'nia':{'kind':'produce_mode'}}
         rows=[]
@@ -209,7 +248,11 @@ class WebExportTests(unittest.TestCase):
             root,args=self.fixture(directory)
             catalog=json.loads((root/'catalog.json').read_text())
             catalog['categories']=[{'id':'character','name':'角色剧情','parent_id':None},{'id':'character.live','name':'Live 前后剧情','parent_id':'character'}]
-            for entry in catalog['entries']:entry['category_id']='character.live'
+            catalog['groups']=[{'id':'nia','kind':'produce_mode','title':'NEXT IDOL AUDITION','order':0,'image_asset_id':None}]
+            for entry in catalog['entries']:
+                entry.update(category_id='character.live', group_ids=['nia'], source_record_id='ProduceStory:'+entry['id'])
+            catalog['entries'][0]['character_ids']=['hski']
+            catalog['entries'][1]['inferred_character_ids']=['ttmr']
             atomic_write(root/'catalog.json',catalog)
             atomic_write(root/'voices.json',{'sources':{'catalog_sha256':hashlib.sha256((root/'catalog.json').read_bytes()).hexdigest()},'scripts':[]})
             result=build(*args)
@@ -223,6 +266,12 @@ class WebExportTests(unittest.TestCase):
             self.assertEqual(len(rows),1)
             self.assertEqual(rows[0]['group_id'],'character.live')
             self.assertEqual(len(rows[0]['source_entry_ids']),2)
+            update=json.loads((folder/'updates.json').read_text())['items'][0]
+            self.assertEqual(update['entry_id'],rows[0]['id'])
+            self.assertEqual(update['group_id'],'character.live')
+            self.assertEqual(update['group_title'],'Live 前后剧情')
+            self.assertEqual(update['character_ids'],['hski','ttmr'])
+            self.assertEqual({entry['group_id'] for entry in chapter['entries']},{'nia'})
 
     def test_training_story_keeps_produce_mode_groups(self):
         with tempfile.TemporaryDirectory() as directory:
