@@ -562,7 +562,7 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
               key={g.id}
             >
               {g.images.length > 0 && (
-                <CardPreview images={g.images} title={g.title} imageAspectRatio={root === "main" ? 16 / 9 : undefined} zoomable={root !== "main"} />
+                <CardPreview images={g.images} title={g.title} imageAspectRatio={root === "main" ? 16 / 9 : undefined} zoomable={!["main", "event"].includes(root)} />
               )}
               <details open={query ? true : undefined}>
                 <summary>
