@@ -197,6 +197,13 @@ main {
   background: #f8f8f6;
   overflow: hidden;
 }
+.character-carousel { position: relative; overflow: hidden; }
+.character-carousel-track { display: flex; align-items: stretch; }
+.character-carousel-slide { flex: 0 0 100%; min-width: 0; }
+.character-carousel-slide > .character-hero { height: 100%; }
+.character-carousel-toggle { position: absolute; right: 14px; bottom: 14px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--line); border-radius: 50%; color: inherit; background: var(--dark-panel, #fffffff0); cursor: pointer; }
+.character-carousel-toggle:hover { border-color: var(--gold); color: var(--gold); }
+.character-carousel-toggle:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 .portrait-stage {
   position: relative;
   min-width: 0;
@@ -332,6 +339,7 @@ main {
 .introduction {
   font-size: 12px;
   line-height: 2.05;
+  min-height: calc(2.05em * 4);
   white-space: pre-line;
   margin-top: 22px;
   color: #656565;

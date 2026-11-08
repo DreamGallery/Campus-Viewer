@@ -33,6 +33,7 @@ STORY_TYPES = {
     'Main': 'main.story', 'Birthday': 'character.birthday',
     'DearnessStory': 'character.dearness', 'ExtraDearnessStory': 'character.dearness',
     'CampaignDearnessStory': 'character.dearness', 'StoryEvent': 'event.story',
+    'PrologueDearnessStory': 'event.story',
     'Tour': 'event.tour', 'GvgRaid': 'event.raid', 'AprilFool': 'event.april_fool',
 }
 PRODUCE_TYPES = {

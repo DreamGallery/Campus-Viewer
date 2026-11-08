@@ -104,10 +104,25 @@ test('joining source lines still warns when the translated line exceeds 21 chara
  for (const length of [21, 22]) {
   const trans = '字'.repeat(length) + '\\n\\n';
   assert.equal(lineBreakMismatch(source, trans), null);
-  assert.deepEqual(longLines([{ trans }]), length === 21 ? [] : [{ row: 1, line: 1, length: 22 }]);
+  assert.deepEqual(longLines([{ text: source, trans }]), length === 21 ? [] : [{ row: 1, line: 1, length: 22 }]);
  }
 });
-test('length limit excludes formatting and ruby annotations, counts punctuation and Unicode',()=>{assert.deepEqual(lineLengths('<em\\=>文字</em>『<r\\=Prima Stella>启明星</r>』\\n你好！'),[7,3]);assert.equal(longLines([{trans:'字'.repeat(21)}]).length,0);assert.deepEqual(longLines([{trans:'字'.repeat(22)+'\\n短句'}]),[{row:1,line:1,length:22}]);assert.deepEqual(lineLengths('😀'),[1]);});
+test('length limit excludes formatting and ruby annotations, counts punctuation and Unicode',()=>{assert.deepEqual(lineLengths('<em\\=>文字</em>『<r\\=Prima Stella>启明星</r>』\\n你好！'),[7,3]);assert.equal(longLines([{text:'原文\\n正文',trans:'字'.repeat(21)}]).length,0);assert.deepEqual(longLines([{text:'原文\\n正文',trans:'字'.repeat(22)+'\\n短句'}]),[{row:1,line:1,length:22}]);assert.deepEqual(lineLengths('😀'),[1]);});
+test('single-line sources skip length warnings while keeping source line-count validation', () => {
+ const trans = '字'.repeat(30);
+ for (const ending of ['', '\\n', '\\n\\n', '\n\n', '\r\n', '\n \t\n　']) {
+  const source = '原文' + ending;
+  assert.deepEqual(longLines([{ text: source, trans }]), []);
+  assert.deepEqual(lineLengths(trans), [30]);
+  assert.equal(lineBreakMismatch(source, trans), null);
+  assert.deepEqual(lineBreakMismatch(source, trans + '\\n第二行'), { expected: 0, actual: 1 });
+ }
+ assert.deepEqual(longLines([
+  { text: '单行\\n', trans },
+  { text: '原文\\n正文', trans: '短句\\n' + trans },
+  { text: '首行\n\n末行', trans },
+ ]), [{ row: 2, line: 2, length: 30 }, { row: 3, line: 1, length: 30 }]);
+});
 test('format wraps selected text and returns editable selection',()=>{const em=insertFormat('前文字后',1,3,'em');assert.equal(em.text,'前<em\\=>文字</em>后');assert.equal(em.text.slice(em.start,em.end),'文字');assert.equal(insertFormat('启明星',0,3,'ruby','Prima Stella').text,'<r\\=Prima Stella>启明星</r>');assert.equal(insertFormat('',0,0,'em').text,'<em\\=>文字</em>');assert.throws(()=>insertFormat('',0,0,'ruby','a>b'));});
 
 test('completion stats merge aliases, ignore unfinished tracks and deduplicate chapters',()=>{setAssigneeUsers({alice:{github:'AliceGH',qq:'123'}});const make=(number:number,title:string,tr:string,pr:string)=>docFromIssue({number,title,updated_at:'2026-01-01',body:`<!-- tr:${tr} -->\n<!-- pr:${pr} -->`});const a=make(1,'story1','qq-123:完成','AliceGH:完成');const stats=completionStats([a,a,make(2,'story2','alice:完成','bob:进行中'),make(3,'story3',':完成','bob:完成')]);assert.deepEqual(stats.find(s=>s.id==='alicegh'),{id:'alicegh',name:'alice',translation:2,proofread:1,total:3,chapters:2});assert.equal(stats.find(s=>s.id==='bob')?.total,1);assert.equal(stats.length,2);setAssigneeUsers({});});

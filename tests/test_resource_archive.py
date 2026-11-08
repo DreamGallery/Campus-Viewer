@@ -84,10 +84,10 @@ class ArchiveTests(unittest.TestCase):
             self.assertEqual(json.loads((root/'current/resource-snapshot.json').read_text())['revision'],'62')
 
     def test_toolkit_dimensions_classification_and_safe_names(self):
-        self.assertEqual(stretch_size('img_general_cidol-hski-3-001_0-full'),(1440,2560))
-        self.assertEqual(stretch_size('img_general_csprt-3-001_full'),(2560,1440))
-        self.assertEqual(stretch_size('img_adv_still_test'),(1440,2560))
-        self.assertEqual(stretch_size('img_general_comic_test'),(1024,768))
+        self.assertEqual(stretch_size('img_general_cidol-hski-3-001_0-full',(1024,2048)),(1440,2560))
+        self.assertEqual(stretch_size('img_general_csprt-3-001_full',(2048,1024)),(2560,1440))
+        self.assertEqual(stretch_size('img_adv_still_test',(1024,2048)),(1440,2560))
+        self.assertEqual(stretch_size('img_general_comic_test',(2048,1024)),(1024,768))
         self.assertEqual(classify('resourceList','adv_test.txt'),'adventure')
         self.assertEqual(classify('assetBundleList','foo_shader_test'),'shader')
         with self.assertRaises(ValueError):safe_name('../evil')
@@ -114,6 +114,13 @@ class ArchiveTests(unittest.TestCase):
             self.assertEqual(info['removed'],['resourceList/adv_removed.txt'])
             self.assertEqual(info['files'],1)
             self.assertEqual((output/'adv_test.txt').read_text(),'decoded')
+
+    def test_still_orientation_comes_from_texture_not_story_filename(self):
+        for name in ('img_adv_still_dear_test_004-00', 'img_adv_still_test-horizontal'):
+            with self.subTest(name=name):
+                self.assertEqual(stretch_size(name, (2048,1024)), (2560,1440))
+                self.assertEqual(stretch_size(name, (1024,2048)), (1440,2560))
+                self.assertIsNone(stretch_size(name, (1024,1024)))
 
 
 class UnicodeResourceNameTests(unittest.TestCase):

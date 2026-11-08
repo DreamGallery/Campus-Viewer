@@ -32,7 +32,7 @@ def event_cover_candidates(name, header=None):
     """Recognize numbered story banners while keeping the resource suffix."""
     match = re.fullmatch(r'(.+)-story-banner(-\d+)?', name or '')
     if not match:
-        return []
+        return [name] if name and is_event_banner(name) else []
     candidates = [name, match[1] + '-banner' + (match[2] or '')]
     alternative = EVENT_COVER_ALTERNATIVES.get(name)
     if alternative:

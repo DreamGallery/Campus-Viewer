@@ -46,6 +46,7 @@ import ResourceVersions from "./ResourceVersions";
 import { characterGradients } from "./character-colors";
 import { officialProfiles } from "./official-profiles";
 import ProfileSlides from "./ProfileSlides";
+import CharacterCarousel from "./CharacterCarousel";
 import ProfileVoice from "./ProfileVoice";
 import CardPreview from "./CardPreview";
 import TextUpdates from "./TextUpdates";
@@ -210,15 +211,12 @@ function Roster({ selected }: { selected: string }) {
     </nav>
   );
 }
-function CharacterPage() {
-  const { characterId = "hski" } = useParams();
-  const catalog = useCatalog();
-  const character = catalog.characters.find((c) => c.id === characterId);
-  if (!character) return <NotFound />;
+function CharacterProfile({ character }: { character: Character }) {
   const d = character.details;
+  const officialIntroduction = officialProfiles[character.id]?.introduction;
+  const introduction = !d.Introduction || d.Introduction.replace(/\s/g, "") === officialIntroduction?.replace(/\s/g, "")
+    ? officialIntroduction : d.Introduction;
   return (
-    <main style={{ "--accent": character.color } as CSSProperties}>
-      <SectionTitle en="IDOL" title="学园名簿" />
       <ProfileSlides key={character.id}>
         <Portrait character={character} />
         <div className="profile-sheet">
@@ -253,7 +251,7 @@ function CharacterPage() {
               </div>
             ))}
           </dl>
-          <p className="introduction" lang="ja">{d.Introduction || officialProfiles[character.id]?.introduction}</p>
+          <p className="introduction" lang="ja">{introduction}</p>
           <div className="profile-bottom">
             <a className="gold-button" href="#stories">
               浏览角色剧情 <ArrowDown size={16} />
@@ -274,6 +272,20 @@ function CharacterPage() {
           </div>
         </div>
       </ProfileSlides>
+  );
+}
+function CharacterPage() {
+  const { characterId } = useParams();
+  const catalog = useCatalog();
+  const [homeCharacterId, setHomeCharacterId] = useState("hski");
+  const character = catalog.characters.find((c) => c.id === (characterId || homeCharacterId));
+  if (!character) return <NotFound />;
+  return (
+    <main style={{ "--accent": character.color } as CSSProperties}>
+      <SectionTitle en="IDOL" title="学园名簿" />
+      {characterId ? <CharacterProfile character={character} /> : <CharacterCarousel characters={catalog.characters} current={character} onChange={setHomeCharacterId}>
+        {item => <CharacterProfile character={item} />}
+      </CharacterCarousel>}
       <div className="roster-heading">
         <p>选择角色</p>
       </div>
@@ -387,13 +399,14 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
         group.items.push(e);
     }
     const result = [...map.values()];
-    if (sort === "name") result.sort((a, b) => a.title.localeCompare(b.title, "ja", { numeric: true }) || a.id.localeCompare(b.id));
-    if (["newest", "oldest", "updated-newest", "updated-oldest"].includes(sort)) result.sort((a, b) => {
-      const left = sort.startsWith("updated") ? a.updatedAt : a.releaseAt;
-      const right = sort.startsWith("updated") ? b.updatedAt : b.releaseAt;
+    const groupSort = sort === "default" && root === "event" ? "newest" : sort;
+    if (groupSort === "name") result.sort((a, b) => a.title.localeCompare(b.title, "ja", { numeric: true }) || a.id.localeCompare(b.id));
+    if (["newest", "oldest", "updated-newest", "updated-oldest"].includes(groupSort)) result.sort((a, b) => {
+      const left = groupSort.startsWith("updated") ? a.updatedAt : a.releaseAt;
+      const right = groupSort.startsWith("updated") ? b.updatedAt : b.releaseAt;
       if (left === null) return right === null ? 0 : 1;
       if (right === null) return -1;
-      return sort.endsWith("newest") ? right - left : left - right;
+      return groupSort.endsWith("newest") ? right - left : left - right;
     });
     if (root === "character") result.sort((a, b) =>
       Number(b.items[0].category_id === "character.idol_card") - Number(a.items[0].category_id === "character.idol_card"));
@@ -654,7 +667,7 @@ function ChapterPage() {
         <p className="chapter-group-title">{entry.group_title}</p>
         <h1>{data.metadata_pending ? "名称待补全" : entry.title}</h1>
         {data.metadata_pending && <p className="pending-explanation">文本已收录，剧情资料尚未关联。<Link to="/updates?view=pending">查看待补全资料</Link></p>}
-        {!!previewImages.length && <CardPreview images={previewImages} imageAspectRatio={root === "main" ? 16 / 9 : undefined} zoomable={root !== "main"} title={data.metadata_pending ? "文件名匹配预览" : entry.group_title || entry.title} />}
+        {root !== "main" && !!previewImages.length && <CardPreview images={previewImages} title={data.metadata_pending ? "文件名匹配预览" : entry.group_title || entry.title} />}
         <div className="chapter-status">
           <span>{statusLabel[data.text_status]}</span>
           <span>{data.line_count} 条文本</span>

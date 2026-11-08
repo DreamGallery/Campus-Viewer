@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { csvText, editorText, insertFormat, lineBreakMismatch, lineLengths } from './text-format';
+import { csvText, editorText, insertFormat, lineBreakMismatch, lineLengths, longLines } from './text-format';
 export function TranslationInput({ value, source, index, disabled, onChange }: { value: string; source: string; index: number; disabled: boolean; onChange: (value: string) => void }) {
   const textarea = useRef<HTMLTextAreaElement>(null);
   const [error, setError] = useState('');
@@ -7,7 +7,7 @@ export function TranslationInput({ value, source, index, disabled, onChange }: {
   const [annotation, setAnnotation] = useState('');
   const text = editorText(value);
   const lengths = lineLengths(text);
-  const over = lengths.flatMap((n, i) => n > 21 ? [`第 ${i + 1} 行 ${n} 字`] : []);
+  const over = longLines([{ text: source, trans: value }]).map(({ line, length }) => `第 ${line} 行 ${length} 字`);
   const mismatch = lineBreakMismatch(source, value);
   const describedBy = [over.length ? `line-warning-${index}` : '', mismatch ? `line-break-warning-${index}` : ''].filter(Boolean).join(' ') || undefined;
   function format(kind: 'em' | 'ruby', apply = false) {

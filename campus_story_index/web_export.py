@@ -159,14 +159,19 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
     def images_for(group):
         # Main chapter covers belong to the ancestor, not the internal StoryGroup.
         ancestor = group
+        event_cover = None
         seen = set()
         while ancestor and ancestor['id'] not in seen:
             seen.add(ancestor['id'])
+            if ancestor['kind'] == 'event' and ancestor.get('image_asset_id'):
+                event_cover = ancestor
             if ancestor['kind'] == 'main_chapter':
                 record = records.get(ancestor.get('source_record_id'), {})
                 cover = assets.get('img_general_commu_chapter-thumb_' + str(record.get('storyAssetId', '')))
                 return [{'url': cover, 'label': '章节封面', 'aspect_ratio': 2}] if cover else []
             ancestor = groups.get(ancestor.get('parent_id'))
+        if not group.get('image_asset_id') and event_cover:
+            group = event_cover
         name = group['image_asset_id']
         header = records.get(group.get('source_record_id'), {}).get('headerAssetId')
         candidates = event_cover_candidates(name, header)

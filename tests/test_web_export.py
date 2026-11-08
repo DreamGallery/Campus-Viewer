@@ -129,6 +129,35 @@ class WebExportTests(unittest.TestCase):
             self.assertIsNone(display_ratio('img_general_event_test-' + suffix))
             self.assertIsNone(display_ratio('img_general_event_test-' + suffix + '-01'))
 
+    def test_event_group_inherits_banner_and_new_npc_gets_speaker_avatar(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, args = self.fixture(directory)
+            catalog = json.loads((root/'catalog.json').read_text())
+            banner = 'img_general_event_character-introduction_test-banner'
+            avatar = 'img_chr_guest_00-thumb-circle'
+            catalog['groups'] = [
+                {'id':'event','kind':'event','title':'介绍活动','order':1,'image_asset_id':banner},
+                {'id':'group','kind':'story_group','title':'序章','order':1,'parent_id':'event','image_asset_id':None}]
+            catalog['characters'] = [{'id':'guest','name':'新 人物','is_playable':False}]
+            catalog['source_records'] = [{'id':'Character:guest','data':{'firstName':'人物','lastName':'新'}}]
+            for entry in catalog['entries']:
+                entry['group_ids'] = ['group', 'event']
+            self.assertIn(avatar, image_requests(catalog))
+            atomic_write(root/'catalog.json', catalog)
+            voices = json.loads((root/'voices.json').read_text())
+            voices['sources']['catalog_sha256'] = hashlib.sha256((root/'catalog.json').read_bytes()).hexdigest()
+            atomic_write(root/'voices.json', voices)
+            atomic_write(root/'assets.json', {'images':[
+                {'name':banner,'path':'images/event.webp','width':1024,'height':256},
+                {'name':avatar,'path':'images/guest.webp','width':256,'height':256}]})
+            result = build(*args)
+            rows = json.loads((root/'output/builds'/result['build_id']/'lists/main.json').read_text())
+            self.assertEqual(rows[0]['group_image'], '/assets/images/event.webp')
+            self.assertEqual(rows[0]['group_images'][0]['aspect_ratio'], 3)
+            self.assertEqual(result['characters'], [])
+            self.assertIn('人物', result['speaker_avatars'][0]['aliases'])
+            self.assertEqual(result['speaker_avatars'][0]['avatar'], '/assets/images/guest.webp')
+
     def test_numbered_campaign_cover_uses_linked_header_and_preserves_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             root, args = self.fixture(directory)

@@ -21,8 +21,10 @@ export function validateLineBreaks(rows: { text: string; trans: string }[]) {
   });
   if (errors.length) throw new Error(errors.join('；'));
 }
-export function longLines(rows: { trans: string }[]) {
-  return rows.flatMap((row, i) => lineLengths(row.trans).flatMap((length, line) => length > 21 ? [{ row: i + 1, line: line + 1, length }] : []));
+export function longLines(rows: { text: string; trans: string }[]) {
+  return rows.flatMap((row, i) => textBody(row.text).includes('\n')
+    ? lineLengths(row.trans).flatMap((length, line) => length > 21 ? [{ row: i + 1, line: line + 1, length }] : [])
+    : []);
 }
 export function insertFormat(text: string, start: number, end: number, kind: 'em' | 'ruby', annotation = '') {
   const selected = text.slice(start, end) || '文字';

@@ -110,6 +110,43 @@ class AdvAndVoiceTest(unittest.TestCase):
         match = match_voice(parsed['voices'][0], parsed['texts'], speaker_resolver(characters()), {'amao'})
         self.assertEqual(match['status'], 'ambiguous')
 
+    def test_dialogue_can_start_before_its_subtitle(self):
+        text = '\n'.join([command('message', 'text=A name=咲季', 0, 4),
+                          command('message', 'text=B name=麻央', 4, 3),
+                          command('voice', 'voice=sud_vo_adv_test_amao-001', 2, 4.8)])
+        parsed = parse_script(text, 'adv_test')
+        match = match_voice(parsed['voices'][0], parsed['texts'], speaker_resolver(characters()), {'amao', 'hski'})
+        self.assertEqual(match['method'], 'unique_speaker_overlap')
+        self.assertEqual(match['text_ids'], [parsed['texts'][1]['id']])
+        self.assertEqual(match['context_text_ids'], [])
+
+    def test_early_dialogue_requires_unique_speaker_overlap(self):
+        texts = [command('message', 'text=A name=麻央', 3, 2),
+                 command('message', 'text=B name=麻央', 6, 2)]
+        parsed = parse_script('\n'.join([*texts, command('voice', 'voice=sud_vo_adv_test_amao-001', 0, 9)]), 'adv_test')
+        resolve = speaker_resolver(characters())
+        self.assertEqual(match_voice(parsed['voices'][0], parsed['texts'], resolve, {'amao', 'hski'})['status'], 'ambiguous')
+        for reference, duration in [('sud_vo_general_part_amao_001', 5),
+                                    ('sud_vo_adv_test_hski-001', 5),
+                                    ('sud_vo_adv_test_amao-001', 3.4)]:
+            with self.subTest(reference=reference, duration=duration):
+                parsed = parse_script('\n'.join([texts[0], command('voice', 'voice=' + reference, 0, duration)]), 'adv_test')
+                self.assertEqual(match_voice(parsed['voices'][0], parsed['texts'], resolve, {'amao', 'hski'})['text_ids'], [])
+
+    def test_early_dialogue_does_not_cross_timeline_or_match_unknown_speaker(self):
+        text = '\n'.join([command('voice', 'voice=sud_vo_adv_test_amao-001', 0, 8),
+                          '[timeline]', command('message', 'text=A name=麻央', 3, 2)])
+        parsed = parse_script(text, 'adv_test')
+        resolve = speaker_resolver(characters())
+        self.assertEqual(match_voice(parsed['voices'][0], parsed['texts'], resolve, {'amao'})['text_ids'], [])
+        for speaker in ('{user}', '__narration__', '誰か'):
+            parsed = parse_script('\n'.join([command('message', 'text=A name=' + speaker, 3, 2),
+                                            command('voice', 'voice=sud_vo_adv_test_amao-001', 0, 5)]), 'adv_test')
+            self.assertEqual(match_voice(parsed['voices'][0], parsed['texts'], resolve, {'amao'})['text_ids'], [])
+        parsed = parse_script('\n'.join([command('narration', 'text=A name=麻央', 3, 2),
+                                        command('voice', 'voice=sud_vo_adv_test_amao-001', 0, 5)]), 'adv_test')
+        self.assertEqual(match_voice(parsed['voices'][0], parsed['texts'], resolve, {'amao'})['text_ids'], [])
+
     def test_dynamic_bindings_keep_contexts(self):
         entries = [{'id': 'a', 'character_ids': ['amao'], 'voice_bindings': [{'source_field': 'voiceAssetId', 'asset_id': 'sud_a'}]},
                    {'id': 'b', 'character_ids': ['hski'], 'voice_bindings': [{'source_field': 'voiceAssetId', 'asset_id': 'sud_b'}]}]

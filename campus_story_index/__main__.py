@@ -18,7 +18,13 @@ def main():
     try:
         catalog = CatalogBuilder(args.masterdata, args.stories).build()
         blocking = {'dangling_story_reference', 'missing_group', 'unmapped_script_source', 'unstable_source_key'}
-        if args.strict and any(d['code'] in blocking for d in catalog['diagnostics']):
+        failures = [d for d in catalog['diagnostics'] if d['code'] in blocking]
+        if args.strict and failures:
+            entries = {e['id']: e for e in catalog['entries']}
+            for diagnostic in failures[:5]:
+                entry = entries.get(diagnostic.get('entry_id'), {})
+                detail = {**diagnostic, **({'source_type': entry['source_type']} if entry.get('source_type') else {})}
+                print('Index validation: ' + json.dumps(detail, ensure_ascii=False), file=sys.stderr)
             raise ValueError('Strict validation failed: ' + json.dumps(catalog['stats']['diagnostic_counts']))
         atomic_write(args.output, catalog)
     except (ValueError, OSError, csv.Error, yaml.YAMLError) as exc:

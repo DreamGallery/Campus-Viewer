@@ -32,11 +32,16 @@ def snapshot(manifest):
             for kind in ('assetBundleList', 'resourceList') for row in manifest[kind] if row.get('state') != 4}
 
 
-def stretch_size(name):
-    if (name.startswith('img_general_cidol-') and name.endswith('-full')) or name.startswith('img_adv_still_'):
-        return (1440, 2560)
-    if name.startswith('img_general_csprt-') and name.endswith('_full'):
-        return (2560, 1440)
+def stretch_size(name, image_size):
+    if ((name.startswith('img_general_cidol-') and name.endswith('-full'))
+            or (name.startswith('img_general_csprt-') and name.endswith('_full'))
+            or name.startswith('img_adv_still_')):
+        width, height = image_size
+        # Packed textures are typically 2:1 or 1:2. Restore their display ratio
+        # without changing orientation; square textures provide no such evidence.
+        if width == height:
+            return None
+        return (2560, 1440) if width > height else (1440, 2560)
     if name.startswith('img_general_comic_'):
         return (1024, 768)
     return None
@@ -74,7 +79,7 @@ def extract_item(kind, item, raw, dest):
         path = dest / 'image/Texture2D' / (texture_name + '.png')
         path.parent.mkdir(parents=True, exist_ok=True)
         image.save(path, 'PNG')
-        size = stretch_size(name) if texture_name == name else None
+        size = stretch_size(name, image.size) if texture_name == name else None
         if size:
             stretched = dest / 'stretch' / (name + '.png')
             stretched.parent.mkdir(parents=True, exist_ok=True)
@@ -87,7 +92,7 @@ def build_package(root, manifest, before, full=False):
     changes = [(kind, row) for kind in ('assetBundleList', 'resourceList') for row in manifest[kind]
                if row.get('state') != 4 and (full or before.get(kind + '/' + row['name']) != current[kind + '/' + row['name']])]
     # A recipe version invalidates partially processed caches when conversion rules change.
-    identity = hashlib.sha256(json.dumps([2, current, before, full], sort_keys=True).encode()).hexdigest()
+    identity = hashlib.sha256(json.dumps([3, current, before, full], sort_keys=True).encode()).hexdigest()
     work = root / 'cache/game-packages' / identity
     dest = work / 'output'; dest.mkdir(parents=True, exist_ok=True)
     workers = max(1, min(8, int(os.getenv('CAMPUS_DOWNLOAD_WORKERS', '4'))))

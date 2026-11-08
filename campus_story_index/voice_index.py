@@ -100,17 +100,28 @@ def match_voice(voice, texts, resolve_speaker, character_ids):
     if not voice['timing'] or not voice.get('voice_ref'):
         return {'status': 'no_timing_or_reference', 'text_ids': [], 'context_text_ids': [], 'candidate_text_ids': []}
     start = voice['timing']['start_ms']
+    end = start + voice['timing']['duration_ms']
     actor = voice_character(voice, character_ids)
     candidates = []
+    early_dialogue = []
     for text in texts:
         if text['kind'] == 'choice' or text['scope'] != voice['scope'] or not text['timing']:
             continue
         timing = text['timing']
         delta = start - timing['start_ms']
+        speaker_ids = resolve_speaker(text['speaker'])
+        # Authored dialogue can start seconds before its subtitle appears. Only
+        # accept a unique same-speaker subtitle covered for at least half its run;
+        # reactions, narration and cross-branch overlaps are not spoken-line proof.
+        if (delta < -150 and text['kind'] == 'message' and text['speaker'] != '{user}'
+                and voice['voice_ref'].startswith('sud_vo_adv_')
+                and actor and actor in speaker_ids and timing['duration_ms'] > 0):
+            overlap = min(end, timing['start_ms'] + timing['duration_ms']) - timing['start_ms']
+            if overlap >= timing['duration_ms'] / 2:
+                early_dialogue.append((text, delta))
         # 150 ms permits small authored voice pre-roll; never cross branch/timeline scopes.
         if delta < -150 or delta > timing['duration_ms'] + 30:
             continue
-        speaker_ids = resolve_speaker(text['speaker'])
         conflict = text['speaker'] == '{user}' or bool(actor and speaker_ids and actor not in speaker_ids)
         candidates.append((text, delta, conflict))
     compatible = [(t, delta) for t, delta, conflict in candidates if not conflict]
@@ -123,6 +134,15 @@ def match_voice(voice, texts, resolve_speaker, character_ids):
                 'method': 'start_proximity' if len(close) == 1 else 'unique_time_window',
                 'start_delta_ms': round(delta, 6),
                 'speaker_evidence': 'consistent' if actor and actor in resolve_speaker(text['speaker']) else 'unknown'}
+    if not compatible and len(early_dialogue) == 1:
+        text, delta = early_dialogue[0]
+        return {'status': 'matched_temporally', 'text_ids': [text['id']],
+                'context_text_ids': [], 'candidate_text_ids': [text['id']],
+                'method': 'unique_speaker_overlap', 'start_delta_ms': round(delta, 6),
+                'speaker_evidence': 'consistent'}
+    if not compatible and len(early_dialogue) > 1:
+        return {'status': 'ambiguous', 'text_ids': [], 'context_text_ids': [],
+                'candidate_text_ids': [text['id'] for text, _ in early_dialogue]}
     context = [t['id'] for t, _, _ in candidates] if len(candidates) == 1 and not compatible else []
     return {'context_text_ids': context, 'status': 'ambiguous' if compatible else 'speaker_conflict' if candidates else 'no_text_in_scope',
             'text_ids': [], 'candidate_text_ids': [t['id'] for t, _, _ in candidates]}

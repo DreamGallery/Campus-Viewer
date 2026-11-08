@@ -122,6 +122,40 @@ class IndexerTest(unittest.TestCase):
         catalog = self.build()
         self.assertEqual({s['id'] for s in catalog['scripts']}, {'adv_sample', 'adv_tutorial_only'})
 
+    def test_prologue_dearness_uses_master_event_not_filename(self):
+        asset = 'adv_dear_test_000-01-horizontal'
+        self.table('Story', [self.story('introduction-01', asset,
+            type='StoryType_PrologueDearnessStory', characterId='test')])
+        self.table('StoryGroup', [{'id': 'introduction', 'title': 'エピソード0',
+            'storyType': 'StoryType_PrologueDearnessStory', 'characterId': 'test',
+            'storyIds': ['introduction-01'], 'headerAssetId': 'img_event-introduction-header'}])
+        self.table('StoryEvent', [{'id': 'event-introduction', 'title': '紹介イベント',
+            'storyEventType': 'StoryEventType_CharacterIntroduction', 'storyGroupId': 'introduction'}])
+        self.csv(asset)
+        catalog = self.build()
+        entry = next(e for e in catalog['entries'] if e['script_id'] == asset)
+        self.assertEqual(entry['category_id'], 'event.story')
+        self.assertEqual(entry['classification_basis'], 'source_type')
+        self.assertIn('StoryEvent:event-introduction', entry['group_ids'])
+        group = next(g for g in catalog['groups'] if g['id'] == 'StoryGroup:introduction')
+        self.assertEqual(group['parent_id'], 'StoryEvent:event-introduction')
+        self.assertFalse(any(d['code'] == 'unmapped_script_source' for d in catalog['diagnostics']))
+
+    def test_strict_failure_reports_unknown_type_without_replacing_output(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+        from campus_story_index.__main__ import main
+        self.table('Story', [self.story('unknown', 'adv_sample', type='StoryType_NewType')])
+        output = self.root / 'catalog.json'
+        output.write_text('previous catalog')
+        log = StringIO()
+        with patch('sys.argv', ['index', '--masterdata', str(self.master), '--stories',
+                              str(self.stories), '--output', str(output), '--strict']), redirect_stderr(log):
+            self.assertEqual(main(), 1)
+        self.assertIn('StoryType_NewType', log.getvalue())
+        self.assertIn('Story:unknown/advAssetId', log.getvalue())
+        self.assertEqual(output.read_text(), 'previous catalog')
+
     def test_unlinked_masterdata_and_empty_status(self):
         self.csv('adv_orphan', [('info', 'adv_orphan.txt', '', ''), ('译者', '', '', '')])
         catalog = self.build()
