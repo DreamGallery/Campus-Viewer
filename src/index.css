@@ -1340,7 +1340,8 @@ b, strong { font-weight: 600; }
 .update-search-actions .search-field { flex: 1; }
 .update-export-toggle { flex-shrink: 0; min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: inherit; background: transparent; font: inherit; cursor: pointer; }
 .update-export-toggle[aria-pressed=true] { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
-.updates-group-grid .update-support-group .card-preview img { width: max(100%, calc(160px * var(--card-preview-ratio))); }
+.updates-group-grid .update-support-group .card-preview img,
+.updates-group-grid .update-event-group .card-preview img { width: max(100%, calc(160px * var(--card-preview-ratio))); }
 
 /* Official profile details and portrait-style roster. */
 .profile-grid .profile-wide { grid-column: 1 / -1; justify-content: flex-start; gap: 24px; }

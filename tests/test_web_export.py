@@ -122,6 +122,39 @@ class WebExportTests(unittest.TestCase):
                 self.assertEqual(rows[0]['group_image'], f'/assets/images/{expected}.webp')
                 self.assertEqual(rows[0]['group_images'][0]['aspect_ratio'], 4)
 
+    def test_contained_event_group_title_is_not_repeated_in_web_outputs(self):
+        cases = [
+            ('氷渡香名江エピソード0', 'エピソード0', '氷渡香名江エピソード0'),
+            ('紹介活動', '紹介活動', '紹介活動'),
+            ('紹介活動', '序章', '紹介活動 / 序章'),
+            ('エピソード0', 'エピソード1', 'エピソード0 / エピソード1'),
+        ]
+        for event_title, group_title, expected in cases:
+            with self.subTest(event=event_title, group=group_title), tempfile.TemporaryDirectory() as directory:
+                root, args = self.fixture(directory)
+                catalog = json.loads((root/'catalog.json').read_text())
+                catalog['categories'] = [
+                    {'id':'event','name':'活动剧情','parent_id':None},
+                    {'id':'event.story','name':'剧情活动','parent_id':'event'}]
+                catalog['groups'] = [
+                    {'id':'event','kind':'event','title':event_title,'order':1,'image_asset_id':None},
+                    {'id':'group','kind':'story_group','title':group_title,'order':1,'parent_id':'event','image_asset_id':None}]
+                for entry in catalog['entries']:
+                    entry.update(category_id='event.story', group_ids=['group', 'event'], source_record_id='Story:test')
+                atomic_write(root/'catalog.json', catalog)
+                voices = json.loads((root/'voices.json').read_text())
+                voices['sources']['catalog_sha256'] = hashlib.sha256((root/'catalog.json').read_bytes()).hexdigest()
+                atomic_write(root/'voices.json', voices)
+                result = build(*args)
+                folder = root/'output/builds'/result['build_id']
+                entries = json.loads((folder/'lists/event.json').read_text())
+                updates = json.loads((folder/'updates.json').read_text())['items']
+                chapters = json.loads((folder/'chapters/adv_test.json').read_text())['entries']
+                self.assertEqual((len(entries), len(updates), len(chapters)), (1, 1, 2))
+                for row in entries + updates + chapters:
+                    self.assertEqual(row['group_title'], expected)
+                    self.assertEqual(row['title'], '第一话')
+
     def test_event_banner_ratio_excludes_other_banner_types(self):
         self.assertEqual(display_ratio('img_general_event_story_event-story-001-banner'), 3)
         self.assertEqual(display_ratio('img_general_event_4am_hski-banner-01'), 3)

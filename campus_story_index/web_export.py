@@ -200,7 +200,7 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
             return ' / '.join(g['title'] for g in main)
         titles = []
         for g in chain:
-            if g['kind'] != 'character' and (not titles or titles[-1] != g['title']):
+            if g['kind'] != 'character' and not any(g['title'] in title for title in titles):
                 titles.append(g['title'])
         return ' / '.join(titles)
     priorities = ['idol_card', 'support_card', 'main_chapter', 'story_group', 'event', 'produce_mode', 'character', 'main_part', 'produce_story_family']

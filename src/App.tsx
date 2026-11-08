@@ -2,6 +2,7 @@ import MusicPlayer from "./music/MusicPlayer";
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
 } from "react";
@@ -194,8 +195,25 @@ function Portrait({ character }: { character: Character }) {
 }
 function Roster({ selected }: { selected: string }) {
   const { characters } = useCatalog();
+  const roster = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const list = roster.current;
+    const tile = list?.querySelector<HTMLElement>(".idol-tile.selected");
+    if (!list || !tile) return;
+    const bounds = list.getBoundingClientRect();
+    const photo = tile.getBoundingClientRect();
+    const style = getComputedStyle(list);
+    const left = bounds.left + list.clientLeft;
+    if (photo.left >= left + parseFloat(style.paddingLeft)
+      && photo.right <= left + list.clientWidth - parseFloat(style.paddingRight)) return;
+    // Scroll only the photo row, preserving the reader's vertical page position.
+    list.scrollTo({
+      left: list.scrollLeft + photo.left - left - (list.clientWidth - photo.width) / 2,
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }, [selected]);
   return (
-    <nav className="roster" aria-label="选择角色">
+    <nav className="roster" aria-label="选择角色" ref={roster}>
       {characters.map(c => (
         <Link
           key={c.id}
@@ -278,18 +296,19 @@ function CharacterPage() {
   const { characterId } = useParams();
   const catalog = useCatalog();
   const [homeCharacterId, setHomeCharacterId] = useState("hski");
+  const [transitionCharacterId, setTransitionCharacterId] = useState<string | null>(null);
   const character = catalog.characters.find((c) => c.id === (characterId || homeCharacterId));
   if (!character) return <NotFound />;
   return (
     <main style={{ "--accent": character.color } as CSSProperties}>
       <SectionTitle en="IDOL" title="学园名簿" />
-      {characterId ? <CharacterProfile character={character} /> : <CharacterCarousel characters={catalog.characters} current={character} onChange={setHomeCharacterId}>
+      {characterId ? <CharacterProfile character={character} /> : <CharacterCarousel characters={catalog.characters} current={character} onChange={setHomeCharacterId} onTransitionTargetChange={setTransitionCharacterId}>
         {item => <CharacterProfile character={item} />}
       </CharacterCarousel>}
       <div className="roster-heading">
         <p>选择角色</p>
       </div>
-      <Roster selected={character.id} />
+      <Roster selected={characterId || transitionCharacterId || character.id} />
       <section id="stories" className="story-section">
         <div className="section-heading">
           <div>
@@ -667,7 +686,7 @@ function ChapterPage() {
         <p className="chapter-group-title">{entry.group_title}</p>
         <h1>{data.metadata_pending ? "名称待补全" : entry.title}</h1>
         {data.metadata_pending && <p className="pending-explanation">文本已收录，剧情资料尚未关联。<Link to="/updates?view=pending">查看待补全资料</Link></p>}
-        {root !== "main" && !!previewImages.length && <CardPreview images={previewImages} title={data.metadata_pending ? "文件名匹配预览" : entry.group_title || entry.title} />}
+        {root !== "main" && root !== "event" && !!previewImages.length && <CardPreview images={previewImages} title={data.metadata_pending ? "文件名匹配预览" : entry.group_title || entry.title} />}
         <div className="chapter-status">
           <span>{statusLabel[data.text_status]}</span>
           <span>{data.line_count} 条文本</span>

@@ -20,10 +20,11 @@ async function prepareImages(element: HTMLElement) {
   await Promise.all(images.map(image => image.decode()));
 }
 
-export default function CharacterCarousel({ characters, current, onChange, children }: {
+export default function CharacterCarousel({ characters, current, onChange, onTransitionTargetChange, children }: {
   characters: Character[];
   current: Character;
   onChange: (id: string) => void;
+  onTransitionTargetChange?: (id: string | null) => void;
   children: (character: Character) => ReactNode;
 }) {
   const container = useRef<HTMLDivElement>(null);
@@ -92,6 +93,7 @@ export default function CharacterCarousel({ characters, current, onChange, child
         easing: "cubic-bezier(.22,.61,.36,1)",
         fill: "forwards",
       });
+      onTransitionTargetChange?.(next.id);
       await animation.finished;
       if (!cancelled) onChange(next.id);
     })().catch(() => { /* Keep the current profile when resources fail or rotation is cancelled. */ });
@@ -99,8 +101,9 @@ export default function CharacterCarousel({ characters, current, onChange, child
       cancelled = true;
       clearTimeout(timer);
       animation?.cancel();
+      if (animation) onTransitionTargetChange?.(null);
     };
-  }, [active, current.id, next, onChange]);
+  }, [active, current.id, next, onChange, onTransitionTargetChange]);
 
   return <div className="character-carousel" ref={container} role="region" aria-roledescription="轮播" aria-label="角色档案">
     <div className="character-carousel-track" ref={track}
