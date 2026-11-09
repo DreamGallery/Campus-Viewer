@@ -29,7 +29,7 @@ def csv_rows(content):
         previous_line = reader.line_num
         if None in row or any(row.get(k) is None for k in ['id', 'name', 'text', 'trans']):
             raise ValueError('Invalid CSV record')
-        if row['id'] in ('info', '译者') or not row['text'].strip():
+        if row['id'] in ('info', '译者') or row['name'] == '__title__' or not row['text'].strip():
             continue
         rows.append({'csv_record_index': index, 'csv_line_start': start_line,
                      'csv_line_end': reader.line_num, 'csv_id': row['id'],

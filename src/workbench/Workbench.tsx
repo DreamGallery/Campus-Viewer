@@ -1,3 +1,4 @@
+import Select from '../Select';
 import { taskDatePages } from './date-pages';
 import { TaskExport } from './TaskExport';
 import { exportTxt, downloadFile } from './export';
@@ -127,9 +128,9 @@ export function WorkbenchPage() {
   const pageTasks = currentDate?.tasks || [];
   const dateNavigation = () => !!datePages.length && <nav className="work-toolbar work-date-pagination" aria-label="协作任务日期分页">
     <button disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>较新日期</button>
-    <label>创建日期 <select aria-label="任务创建日期" value={currentDate.date} onChange={event => setPage(datePages.findIndex(group => group.date === event.target.value) + 1)}>
+    <label>创建日期 <Select aria-label="任务创建日期" value={currentDate.date} onChange={event => setPage(datePages.findIndex(group => group.date === event.target.value) + 1)}>
       {datePages.map(group => <option key={group.date} value={group.date}>{group.date}（{group.tasks.length} 项）</option>)}
-    </select></label>
+    </Select></label>
     <span>{currentPage} / {pages} · 当日 {pageTasks.length} 项 · 北京时间</span>
     <button disabled={currentPage === pages} onClick={() => setPage(currentPage + 1)}>较早日期</button>
   </nav>;
@@ -146,9 +147,9 @@ export function WorkbenchPage() {
       <div className="work-toolbar">
         <input aria-label="搜索协作任务" placeholder="搜索剧情资源名" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         {!mine && <button onClick={() => { setMine(true); setPage(1); }}>我的任务</button>}
-        <label>剧情分类 <select aria-label="剧情分类筛选" value={category} onChange={e => { setCategory(e.target.value); setPage(1); }}><option value="all">全部分类</option>{Object.entries(STORY_LABELS).map(([id,name]) => <option key={id} value={id}>{name}</option>)}</select></label>
-        <label>任务状态 <select aria-label="任务状态" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="all">全部状态</option>{['待翻译','翻译中','待校对','校对中','已完成'].map(s => <option key={s}>{s}</option>)}</select></label>
-        <label>排序 <select aria-label="任务排序" value={sort} onChange={e => { setSort(e.target.value); setPage(1); }}><option value="default">默认顺序</option><option value="updated">最近更新</option><option value="name">剧情名称</option></select></label>
+        <label>剧情分类 <Select aria-label="剧情分类筛选" value={category} onChange={e => { setCategory(e.target.value); setPage(1); }}><option value="all">全部分类</option>{Object.entries(STORY_LABELS).map(([id,name]) => <option key={id} value={id}>{name}</option>)}</Select></label>
+        <label>任务状态 <Select aria-label="任务状态" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="all">全部状态</option>{['待翻译','翻译中','待校对','校对中','已完成'].map(s => <option key={s}>{s}</option>)}</Select></label>
+        <label>排序 <Select aria-label="任务排序" value={sort} onChange={e => { setSort(e.target.value); setPage(1); }}><option value="default">默认顺序</option><option value="updated">最近更新</option><option value="name">剧情名称</option></Select></label>
         {(['export', 'tr', 'pr'] as const).map(mode => <button key={mode} disabled={claiming} aria-pressed={selectionMode === mode} onClick={() => changeMode(mode)}>{selectionMode === mode ? '退出选择' : { export: '选择导出', tr: '认领翻译', pr: '认领校对' }[mode]}</button>)}
         <span>{mine ? '我的任务' : '全部任务'} · {shown.length} 项</span>
       </div>
@@ -173,7 +174,7 @@ function Speaker({ name, index, choice }: { name: string; index: number; choice:
   const matches = (catalog.speaker_avatars || catalog.characters.map(c => ({ ...c, aliases: [c.name, c.first_name] })))
     .filter(c => c.aliases.some(alias => normalize(alias) === normalize(name)));
   const avatar = matches.length === 1 ? matches[0].avatar : null;
-  const label = name === '{user}' ? '制作人' : name || (choice ? '选项' : '旁白');
+  const label = name === '{user}' ? '制作人' : name === '__title__' ? '标题' : name || (choice ? '选项' : '旁白');
   const [failed, setFailed] = useState(false);
   return <div className="work-speaker"><span className="work-speaker-avatar">{avatar && !failed ? <img src={avatar} alt="" loading="lazy" onError={() => setFailed(true)} /> : <UserRound size={24} aria-hidden="true" />}</span><small>{String(index + 1).padStart(3, '0')} · {label}</small></div>;
 }
@@ -317,7 +318,7 @@ export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voice
       <p>{REMOTE_LOAD_LABELS[loadConfirmation]}会替换当前编辑内容，并覆盖此浏览器保存的草稿。需要保留当前内容，请先导出 CSV 备份。</p>
     </ConfirmDialog>}
     <div className="work-toolbar"><span>{remoteLabel} · {doc?.data.filter(r => hasTranslation(r.trans)).length || 0} / {doc?.data.length || 0}</span><button disabled={!doc || busy} onClick={() => run(async () => { if (doc) download(toCsvText(doc, { validateLineBreaks: true }), scriptId + '.csv'); })}>导出 CSV</button><label className="work-button">导入 CSV<input type="file" accept=".csv,text/csv" hidden disabled={!doc || busy} onChange={e => { const file = e.target.files?.[0]; if (file && source.current) run(async () => { setDoc(mergeTranslation(source.current!, await file.text())); setChanged(true); setRemoteLabel('导入译文'); }); e.target.value = ''; }} /></label><button disabled={!doc || busy} onClick={() => run(async () => { if (doc) { downloadFile(await exportTxt(scriptId, toCsvText(doc, { validateLineBreaks: true })), scriptId + '.txt'); setNotice('TXT 已导出；未翻译的台词保留原文'); } })}>导出 TXT</button>{draftAvailable && <button onClick={() => download(draftAvailable, scriptId + '-旧草稿.csv')}>下载旧草稿</button>}</div>
-    {auth?.canCollaborate && <div className="work-collaboration"><div className="work-toolbar"><select aria-label="协作工序" value={role} disabled={busy} onChange={e => { setRole(e.target.value as TrackKey); setRevising(false); setLengthConfirmation(false); }}><option value="tr">翻译</option><option value="pr">校对</option></select>{remoteReady && task && <><button disabled={busy || !auth?.user || task[role].state !== '待认领'} onClick={() => run(claim)}>认领{role === 'tr' ? '翻译' : '校对'}</button>{task[role].state === '完成' && !revising && <button disabled={busy || !auth?.user} onClick={() => setRevising(true)}>修订{role === 'tr' ? '翻译' : '校对'}</button>}</>}<button disabled={busy || !doc || remoteReady} onClick={() => run(connect)}>{remoteReady ? '已连接任务' : '连接协作任务'}</button>{task && <a href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/issues/${task.number}`} target="_blank" rel="noreferrer">任务 #{task.number}</a>}</div>
+    {auth?.canCollaborate && <div className="work-collaboration"><div className="work-toolbar"><Select aria-label="协作工序" value={role} disabled={busy} onChange={e => { setRole(e.target.value as TrackKey); setRevising(false); setLengthConfirmation(false); }}><option value="tr">翻译</option><option value="pr">校对</option></Select>{remoteReady && task && <><button disabled={busy || !auth?.user || task[role].state !== '待认领'} onClick={() => run(claim)}>认领{role === 'tr' ? '翻译' : '校对'}</button>{task[role].state === '完成' && !revising && <button disabled={busy || !auth?.user} onClick={() => setRevising(true)}>修订{role === 'tr' ? '翻译' : '校对'}</button>}</>}<button disabled={busy || !doc || remoteReady} onClick={() => run(connect)}>{remoteReady ? '已连接任务' : '连接协作任务'}</button>{task && <a href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/issues/${task.number}`} target="_blank" rel="noreferrer">任务 #{task.number}</a>}</div>
     {remoteReady && task && <><p>翻译：{task.tr.state} {displayWorkUser(task.tr.user) || '—'} / 校对：{task.pr.state} {displayWorkUser(task.pr.user) || '—'}</p><div className="work-toolbar">{(['ai', 'translated', 'proofread', 'draft'] as const).map(s => <button disabled={busy} key={s} onClick={() => changed ? setLoadConfirmation(s) : void run(() => loadStage(s))}>{REMOTE_LOAD_LABELS[s]}</button>)}</div>{active?.blocked && <p>{active.blockMsg}</p>}</>}
     </div>}{error && <p className="work-error" role="alert">{error}</p>}{notice && <p className="work-notice" role="status">{notice}</p>}{busy && <p role="status">正在处理…</p>}
     {voices?.source_sha256 && sourceHash && voices.source_sha256 !== sourceHash && <p className="work-notice">原文版本与语音索引不一致，请更新索引后播放。</p>}

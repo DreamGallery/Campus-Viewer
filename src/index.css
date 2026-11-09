@@ -57,6 +57,30 @@ select:focus-visible {
   outline: 3px solid #a77932;
   outline-offset: 4px;
 }
+.select-field {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: middle;
+}
+.select-field > select {
+  width: 100%;
+  min-width: 0;
+}
+.select-field > select:not([multiple]) {
+  appearance: none;
+  padding-inline-end: 36px;
+}
+.select-field > svg {
+  position: absolute;
+  inset-inline-end: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.select-field:has(select:disabled) > svg { opacity: .4; }
+.select-field:has(select[multiple]) > svg { display: none; }
 h1,
 h2,
 h3,
@@ -742,8 +766,12 @@ main {
   min-height: 44px;
   border: 1px solid var(--line);
   background: #fff;
-  margin-top: 8px;
   padding: 10px;
+}
+.variant-label .select-field {
+  display: flex;
+  width: 100%;
+  margin-top: 8px;
 }
 .chapter-source {
   font-size: 11px;
@@ -1305,7 +1333,8 @@ b, strong { font-weight: 600; }
 .updates-intro p, .pending-explanation { color: #81796e; font-size: 12px; line-height: 1.9; }
 .updates-intro a, .update-links a { color: #94713d; text-decoration: underline; text-underline-offset: 4px; }
 .updates-tools .search-field { width: min(100%, 440px); }
-.updates-tools select { margin-left: 8px; border: 1px solid #d8cdbb; border-radius: 6px; padding: 8px; background: #fff9; color: inherit; font: inherit; }
+.updates-tools .select-field { margin-left: 8px; }
+.updates-tools select { border: 1px solid #d8cdbb; border-radius: 6px; padding: 8px; background: #fff9; color: inherit; font: inherit; }
 .updates-list { display: grid; gap: 12px; }
 .update-row { display: flex; align-items: flex-start; gap: 20px; padding: 20px; border: 1px solid #ded7cb; border-radius: 10px; background: #ffffffb0; }
 .update-art { width: 112px; height: 90px; flex-shrink: 0; object-fit: contain; }
@@ -1341,6 +1370,7 @@ b, strong { font-weight: 600; }
 .update-export-toggle { flex-shrink: 0; min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; color: inherit; background: transparent; font: inherit; cursor: pointer; }
 .update-export-toggle[aria-pressed=true] { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
 .updates-group-grid .update-support-group .card-preview img,
+.updates-group-grid .update-main-group .card-preview img,
 .updates-group-grid .update-event-group .card-preview img { width: max(100%, calc(160px * var(--card-preview-ratio))); }
 
 /* Official profile details and portrait-style roster. */

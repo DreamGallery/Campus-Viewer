@@ -1,3 +1,4 @@
+import Select from './Select';
 import MusicPlayer from "./music/MusicPlayer";
 import {
   useEffect,
@@ -501,14 +502,14 @@ function StoryDirectory({ list, root }: { list: string; root: string }) {
       </div>
       {root !== "main" && <div className="directory-filters">
         <div className="sort-row">
-          <label>排序 <select aria-label="剧情排序" value={sort} onChange={e => { setSort(e.target.value); setPage(1); }}>
+          <label>排序 <Select aria-label="剧情排序" value={sort} onChange={e => { setSort(e.target.value); setPage(1); }}>
             <option value="default">默认顺序</option>
             <option value="updated-newest">文本更新时间 · 最新优先</option>
             <option value="updated-oldest">文本更新时间 · 最早优先</option>
             <option value="newest">上线时间 · 最新优先</option>
             <option value="oldest">上线时间 · 最早优先</option>
             {(root === "support_card" || root === "event") && <option value="name">{root === "event" ? "活动名称" : "卡牌名称"} · 正序</option>}
-          </select></label>
+          </Select></label>
           <button className="reset-filters" onClick={resetFilters}>清除筛选</button>
         </div>
         {(list === "character" || root === "support_card") && <fieldset className="character-filters">
@@ -690,12 +691,12 @@ function ChapterPage() {
         <div className="chapter-status">
           <span>{statusLabel[data.text_status]}</span>
           <span>{data.line_count} 条文本</span>
-          <span>{data.voice_event_count} 个语音事件</span>
+          <span>{data.voices?.lines.reduce((count, line) => count + line.clips.length, 0) ?? 0} 条可播放语音</span>
         </div>
         {data.entries.length > 1 && (
           <label className="variant-label">
             剧情入口
-            <select
+            <Select
               value={entry.id}
               onChange={(e) => setParams({ entry: e.target.value })}
             >
@@ -710,7 +711,7 @@ function ChapterPage() {
                     .join("、")}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         <ChapterWorkbench key={data.script_id} scriptId={data.script_id} voices={data.voices} />

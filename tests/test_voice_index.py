@@ -73,6 +73,19 @@ class AdvAndVoiceTest(unittest.TestCase):
         self.assertEqual(mapping, {0: 0, 1: 1})
         self.assertEqual(status, 'exact_sequence')
 
+    def test_titles_do_not_interrupt_voice_alignment_or_change_csv_record_positions(self):
+        text = '\n'.join([command('message', 'text=はい name=麻央', 0, 2),
+                          '[title title=第1話]', command('message', 'text=はい name=麻央', 3, 2)])
+        content = csv_bytes([['000', '麻央', 'はい', ''], ['000', '__title__', '第1話', ''],
+                             ['000', '麻央', 'はい', ''], ['info', 'adv_test.txt', '', ''],
+                             ['译者', '', '', '']])
+        result = make_script('adv_test', content, text.encode(), [], {'amao', 'hski'}, {}, {},
+                             speaker_resolver(characters()))
+        self.assertEqual(result['csv_alignment'], 'exact_sequence')
+        self.assertEqual([row['csv_record_index'] for row in result['lines']], [1, 3])
+        self.assertTrue(all(row['csv_match_status'] == 'matched' for row in result['lines']))
+        self.assertEqual(result['source_texts_without_csv'], [])
+
     def test_changed_sequence_does_not_guess_duplicate_occurrences(self):
         rows = [{'kind': 'dialogue', 'speaker': '麻央', 'text': 'はい'}]
         source = [{'kind': 'message', 'speaker': '麻央', 'text': 'はい'}] * 2

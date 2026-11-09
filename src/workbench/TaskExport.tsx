@@ -1,3 +1,4 @@
+import Select from '../Select';
 import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { type Auth, Github } from './github';
@@ -33,7 +34,7 @@ export function TaskExport({ tasks, auth }: { tasks: DocTask[]; auth: Auth }) {
   }
   return <div className="work-export"><div className="work-toolbar">
     <span>已选 {tasks.length} 项</span>
-    <label>导出版本 <select aria-label="导出版本" value={stage} disabled={busy} onChange={e => setStage(e.target.value as ExportStage)}><option value="best">正式稿（校对优先）</option><option value="translated">翻译稿</option><option value="proofread">校对稿</option><option value="ai">机器译文</option></select></label>
+    <label>导出版本 <Select aria-label="导出版本" value={stage} disabled={busy} onChange={e => setStage(e.target.value as ExportStage)}><option value="best">正式稿（校对优先）</option><option value="translated">翻译稿</option><option value="proofread">校对稿</option><option value="ai">机器译文</option></Select></label>
     <button disabled={busy || !tasks.length} onClick={() => run('csv')}><Download size={16} />导出 CSV</button>
     <button disabled={busy || !tasks.length} onClick={() => run('txt')}><Download size={16} />导出 TXT</button>
   </div>{notice && <p className="work-export-notice" role="status">{notice}</p>}</div>;

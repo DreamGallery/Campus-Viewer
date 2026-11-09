@@ -1,3 +1,4 @@
+import Select from './Select';
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, ChevronLeft, ChevronRight, Search, ChevronDown, BookOpen } from "lucide-react";
@@ -88,14 +89,14 @@ export default function TextUpdates() {
     {pendingOnly && <p className="pending-explanation">这些文本尚未关联剧情资料，不一定都是未上线内容。分类、角色与预览按文件名尝试匹配；卡名、稀有度等未知信息暂不填写。</p>}
     <div className="updates-tools">
       <div className="update-search-actions"><div className="search-field"><Search size={17} /><input aria-label="搜索文本更新" placeholder="搜索角色、章节或文件名" value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} /></div><button className="update-export-toggle" disabled={exporting} aria-pressed={exportMode} onClick={() => { setExportMode(!exportMode); setSelected(new Set()); setExportNotice(''); }}>{exportMode ? '退出选择' : '选择导出'}</button></div>
-      <label>剧情分类 <select aria-label="更新剧情分类" value={category} onChange={e => { setCategory(e.target.value); setPage(1); }}>
+      <label>剧情分类 <Select aria-label="更新剧情分类" value={category} onChange={e => { setCategory(e.target.value); setPage(1); }}>
         <option value="all">全部剧情</option>
         {catalog.categories.filter(c => c.parent_id === null).map(root => <optgroup key={root.id} label={root.name}>
           <option value={root.id}>{root.name}（全部）</option>
           {catalog.categories.filter(c => c.parent_id === root.id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </optgroup>)}
-      </select></label>
-      <label>变更类型 <select aria-label="文本变更类型" value={kind} onChange={e => { setKind(e.target.value); setPage(1); }}><option value="all">全部</option><option value="added">新增文件</option><option value="modified">修改文件</option></select></label>
+      </Select></label>
+      <label>变更类型 <Select aria-label="文本变更类型" value={kind} onChange={e => { setKind(e.target.value); setPage(1); }}><option value="all">全部</option><option value="added">新增文件</option><option value="modified">修改文件</option></Select></label>
     </div>
     {!data ? <p role="status">{error || "正在加载文本更新…"}</p> : <>
       <p className="results-label" role="status">找到 {groups.length} 个剧情分组 · {rows.length} 篇文本</p>
@@ -105,7 +106,7 @@ export default function TextUpdates() {
         {exportMode && <><button disabled={exporting} onClick={() => setSelected(new Set(rows.map(row => row.script_id)))}>选择筛选结果</button><button disabled={exporting} onClick={() => setSelected(previous => new Set([...previous, ...groups.slice((current-1)*24,current*24).flatMap(g => g.items.map(r => r.script_id))]))}>选择本页</button><button disabled={exporting || !selected.size} onClick={() => setSelected(new Set())}>清空选择</button><span>已选 {selected.size} 个章节</span><button disabled={exporting || !selected.size} onClick={() => exportSelected('csv')}>导出 CSV</button><button disabled={exporting || !selected.size} onClick={() => exportSelected('txt')}>导出原始 TXT</button><p>导出当前发布的源文本，不包含协作译文或浏览器草稿。</p></>}
       </div>}
       {exportNotice && <p className="update-export-notice" role="status">{exportNotice}</p>}
-      <div className="story-grid updates-group-grid">{groups.slice((current - 1) * 24, current * 24).map(group => <article key={group.id} className={`story-group ${group.images.length ? "has-art" : ""} ${group.items[0].category_id.startsWith("character") ? "update-character-group" : group.items[0].category_id.startsWith("support_card") ? "update-support-group" : group.items[0].category_id.startsWith("event") ? "update-event-group" : ""}`}>
+      <div className="story-grid updates-group-grid">{groups.slice((current - 1) * 24, current * 24).map(group => <article key={group.id} className={`story-group ${group.images.length ? "has-art" : ""} ${group.items[0].category_id.startsWith("character") ? "update-character-group" : group.items[0].category_id.startsWith("support_card") ? "update-support-group" : group.items[0].category_id.startsWith("event") ? "update-event-group" : group.items[0].category_id.startsWith("main") ? "update-main-group" : ""}`}>
         {group.images.length ? <CardPreview images={group.images} title={group.title} zoomable={!["main", "event"].includes(group.items[0].category_id.split(".")[0])} imageAspectRatio={group.items[0].category_id.split(".")[0] === "main" ? 16 / 9 : undefined} /> : <div className="update-art-placeholder" aria-hidden="true"><BookOpen size={38} strokeWidth={1} /></div>}
         <details>
           <summary>
