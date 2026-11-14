@@ -20,7 +20,7 @@ RUN sh /build/build_ffmpeg_audio.sh
 
 FROM python-base AS masterdb-wheels
 RUN apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 update && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 install -y --no-install-recommends git build-essential libsqlcipher-dev && rm -rf /var/lib/apt/lists/*
-ARG HATSUBOSHI_TOOLKIT_REF=40b89a4eca984fdcff1548cfc0b495ede194b253
+ARG HATSUBOSHI_TOOLKIT_REF=9af46f484abdf0d0001a1ae544411f68d4a76f38
 COPY requirements.txt requirements-audio.txt requirements-assets.txt requirements-r2.txt /constraints/
 RUN pip wheel --index-url "$PIP_INDEX_URL" --wheel-dir /wheels -r /constraints/requirements-r2.txt "hatsuboshi-masterdb @ git+https://github.com/DreamGallery/HatsuboshiToolkit.git@${HATSUBOSHI_TOOLKIT_REF}"
 
