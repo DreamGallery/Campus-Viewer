@@ -72,6 +72,8 @@ Worker 缓存带版本或内容哈希的完整资源（单个不超过 8 MiB）�
 
 按 [Docker 更新器说明](../deploy/docker/README.md)准备 `docker-compose.yaml`、`.env`、`.env.r2.local` 和游戏账号目录，然后拉取镜像启动。默认使用游戏 API masterdb 和 Toolkit 的 `API` 分支；设置 `CAMPUS_MASTER_SOURCE=git` 可改用 Git masterdata。
 
+更新器每轮使用同步后的 Toolkit `API` 分支中的 `src/hatsuboshi_master/proto/schema.pb`，通过完整 masterdb 校验后才切换快照。获取或校验失败会停止本轮发布，保留上次成功的 masterdb 和已发布资源。仅更新 schema 无需重新构建支持此功能的镜像；解析程序和依赖仍固定在镜像内，修改它们需要更新镜像。Toolkit 的 **Actions → Update masterdb schema** 支持手动填写完整 APK／XAPK 的 HTTPS 下载链接，自动生成、检查并提交 schema 到 `API` 分支。
+
 `.env.r2.local` 的主要设置：
 
 | 变量 | 内容 |

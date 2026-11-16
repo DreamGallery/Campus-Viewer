@@ -62,7 +62,13 @@ def fetch_masterdata(root, repos):
     if master_source() == 'git':
         return repos / 'master', None
     output = root / 'cache/masterdb'
-    command([sys.executable, '-m', 'hatsuboshi_master', '--output', output])
+    schema = repos / 'toolkit/src/hatsuboshi_master/proto/schema.pb'
+    if not schema.is_file():
+        raise FileNotFoundError('Toolkit checkout does not contain a masterdb schema')
+    # The installed parser stays pinned; only descriptors come from the synced API branch.
+    # It validates every table before atomically replacing masterdb/current. Let failures
+    # stop this update so an old masterdb cannot be published with a new resource release.
+    command([sys.executable, '-m', 'hatsuboshi_master', '--output', output, '--schema', schema])
     # Resolve once: all build stages must consume the same immutable snapshot.
     snapshot = (output / 'current').resolve(strict=True)
     state = json.loads((snapshot / 'snapshot.json').read_text())

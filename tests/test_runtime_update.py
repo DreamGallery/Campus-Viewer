@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -119,6 +120,12 @@ class RuntimeUpdateTests(RuntimeTestCase):
 
 
 class MasterSourceTests(RuntimeTestCase):
+    def schema(self, root):
+        path = root / 'repos/toolkit/src/hatsuboshi_master/proto/schema.pb'
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b'candidate schema')
+        return path
+
     def test_api_snapshot_changes_signature_without_master_git_checkout(self):
         with patch('campus_story_index.runtime_update.subprocess.check_output', return_value=b'commit') as git:
             one = input_signature(Path('/fake'), {}, {'version': 'one'})
@@ -134,16 +141,53 @@ class MasterSourceTests(RuntimeTestCase):
             snapshot.mkdir(parents=True)
             (snapshot / 'snapshot.json').write_text('{"version":"one"}')
             (root / 'cache/masterdb/current').symlink_to(snapshot)
+            schema = self.schema(root)
             with patch.dict(os.environ, {'CAMPUS_MASTER_SOURCE':'api'}), patch('campus_story_index.runtime_update.command') as command:
                 path, state = fetch_masterdata(root, root/'repos')
             self.assertEqual(path, snapshot.resolve())
             self.assertEqual(state['version'], 'one')
             self.assertIn('hatsuboshi_master', command.call_args.args[0])
+            args = command.call_args.args[0]
+            self.assertEqual(args[args.index('--schema') + 1], schema)
 
     def test_failed_master_fetch_cannot_fall_back_to_old_git_tables(self):
         from campus_story_index.runtime_update import fetch_masterdata
-        with patch.dict(os.environ, {'CAMPUS_MASTER_SOURCE':'api'}), patch('campus_story_index.runtime_update.command', side_effect=RuntimeError('failed')):
-            with self.assertRaises(RuntimeError): fetch_masterdata(Path('/fake'), Path('/fake/repos'))
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {'CAMPUS_MASTER_SOURCE':'api'}):
+            root = Path(folder)
+            self.schema(root)
+            with patch('campus_story_index.runtime_update.command', side_effect=RuntimeError('failed')):
+                with self.assertRaises(RuntimeError): fetch_masterdata(root, root / 'repos')
+
+    def test_missing_remote_schema_does_not_use_bundled_schema(self):
+        from campus_story_index.runtime_update import fetch_masterdata
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {'CAMPUS_MASTER_SOURCE': 'api'}), \
+             patch('campus_story_index.runtime_update.command') as command:
+            root = Path(folder)
+            with self.assertRaises(FileNotFoundError): fetch_masterdata(root, root / 'repos')
+            command.assert_not_called()
+
+    def test_rejected_schema_preserves_previous_release_without_publishing(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {'CAMPUS_MASTER_SOURCE': 'api'}, clear=True):
+            root = Path(folder)
+            schema = self.schema(root)
+            previous = root / 'releases/previous'
+            previous.mkdir(parents=True)
+            (previous / 'manifest.json').write_text('previous release')
+            (root / 'current').symlink_to(previous)
+            master = root / 'cache/masterdb/versions/previous'
+            master.mkdir(parents=True)
+            (master / 'snapshot.json').write_text('{"version":"previous"}')
+            (master.parent.parent / 'current').symlink_to(master)
+            with patch('campus_story_index.runtime_update.sync_repo'), \
+                 patch('campus_story_index.runtime_update.command', side_effect=subprocess.CalledProcessError(1, 'masterdb')), \
+                 patch('campus_story_index.runtime_update.fetch_manifest') as fetch, \
+                 patch('campus_story_index.runtime_update.publish') as publish:
+                self.assertFalse(update(root))
+                fetch.assert_not_called()
+                publish.assert_not_called()
+            self.assertEqual((root / 'current').resolve(), previous.resolve())
+            self.assertEqual((master.parent.parent / 'current').resolve(), master.resolve())
+            self.assertEqual(schema.read_bytes(), b'candidate schema')
 
 
 class VoiceRuntimeTests(RuntimeTestCase):
