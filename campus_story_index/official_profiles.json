@@ -10,7 +10,8 @@
     "voices": [
       "https://gakuen.idolmaster-official.jp/assets/data/voice/saki/voice_1.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/saki/voice_2.mp3"
-    ]
+    ],
+    "introduction": "入学試験首席の新入生。勝ち気で負けず嫌いな元アスリート。幼少時から物覚えが良く、なにをやらせても上手にこなす神童だった。妹の花海佑芽とは大の仲良しで、様々なスポーツで競い合ってきたライバル同士でもある。佑芽の才能を誰よりも高く評価し、恐れている。"
   },
   "ttmr": {
     "source_url": "https://gakuen.idolmaster-official.jp/idol/temari/",
@@ -22,7 +23,8 @@
     "voices": [
       "https://gakuen.idolmaster-official.jp/assets/data/voice/temari/voice_1.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/temari/voice_2.mp3"
-    ]
+    ],
+    "introduction": "中等部ナンバーワンアイドルと呼ばれていた元エリート。クールでストイックな皮肉屋と思いきや、甘えん坊で怠け者なトラブルメーカーでもある。二面性のある少女。嫌いな自分と決別し、自分自身を好きでいるために、トップアイドルを目指している。"
   },
   "fktn": {
     "source_url": "https://gakuen.idolmaster-official.jp/idol/kotone/",
@@ -35,7 +37,8 @@
     "voices": [
       "https://gakuen.idolmaster-official.jp/assets/data/voice/kotone/voice_1.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/kotone/voice_2.mp3"
-    ]
+    ],
+    "introduction": "「お金を稼げるアイドル」を夢見る、がめつい女の子。人生一発逆転の手段としてアイドルを目指している。成績が悪く自己評価が低いが、可愛い顔には自信アリ。なぜか過大評価してくる生徒会長・星南のことがちょっぴり苦手。"
   },
   "amao": {
     "source_url": "https://gakuen.idolmaster-official.jp/idol/mao/",
@@ -48,7 +51,8 @@
     "voices": [
       "https://gakuen.idolmaster-official.jp/assets/data/voice/mao/voice_1.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/mao/voice_2.mp3"
-    ]
+    ],
+    "introduction": "カッコいいアイドルを目指す3年生の女の子。初星学園アイドル科の寮の寮長をしており面倒見がよい。後輩達からは小さな王子様（リトルプリンス）として慕われている。幼い頃から歌劇のスターに憧れ、子役として活躍していた過去を持つ。"
   },
   "kllj": {
     "source_url": "https://gakuen.idolmaster-official.jp/idol/lilja/",
@@ -60,7 +64,8 @@
     "voices": [
       "https://gakuen.idolmaster-official.jp/assets/data/voice/lilja/voice_1.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/lilja/voice_2.mp3"
-    ]
+    ],
+    "introduction": "海外出身の新入生。歌やダンスの経験はなく、いつも自信がなさそうに縮こまっている。才能があるようには見えないが、アイドルへの憧れは本物で、相当な努力家。親友の清夏とは、一緒にステージに立つ約束をしている。"
   },
   "kcna": {
     "source_url": "https://gakuen.idolmaster-official.jp/idol/china/",
@@ -73,7 +78,8 @@
     "voices": [
       "https://gakuen.idolmaster-official.jp/assets/data/voice/china/voice_1.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/china/voice_2.mp3"
-    ]
+    ],
+    "introduction": "甘やかされて育った生粋のお嬢様。天真爛漫な女の子。「立派なアイドル」を夢見て初星学園に入学した。その実力は、本人いわく「全校生徒の中で最下位ですわ！」とのこと。"
   },
   "ssmk": {
     "source_url": "https://gakuen.idolmaster-official.jp/idol/sumika/",
@@ -85,7 +91,8 @@
     "voices": [
       "https://gakuen.idolmaster-official.jp/assets/data/voice/sumika/voice_1.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/sumika/voice_2.mp3"
-    ]
+    ],
+    "introduction": "授業やレッスンをサボる不真面目なギャル。おちゃらけた態度ではあるが、元気で明るく、誰とでも仲良くなれる気質は彼女の魅力だ。入学前にはバレエで世界に羽ばたいた実績もあり、期待されていたものの、当人にやる気はない。懸命にアイドルを目指している親友のリーリヤを応援している。"
   },
   "shro": {
     "source_url": "https://gakuen.idolmaster-official.jp/idol/hiro/",
@@ -98,7 +105,8 @@
     "voices": [
       "https://gakuen.idolmaster-official.jp/assets/data/voice/hiro/voice_1.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/hiro/voice_2.mp3"
-    ]
+    ],
+    "introduction": "ミステリアスな雰囲気漂う天才少女。簡単で退屈すぎる日々を厭い、苦手分野に挑戦すべく初星学園に入学した。「辛く苦しいレッスン」や「うまくいかないこと」に喜びを感じる変人。アイドルを目指した理由は「いちばんわたしに向いてなさそうだから」。"
   },
   "hrnm": {
     "source_url": "https://gakuen.idolmaster-official.jp/idol/rinami/",
@@ -110,7 +118,8 @@
     "voices": [
       "https://gakuen.idolmaster-official.jp/assets/data/voice/rinami/voice_1.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/rinami/voice_2.mp3"
-    ]
+    ],
+    "introduction": "大人びた雰囲気のある3年生。しっかりもので優しく、面倒見のいい寮のみんなのお姉さん。過去にユニットに所属していたこともあるが、結果は振るわなかった。生徒会に所属しており、書記を務めている。"
   },
   "hume": {
     "source_url": "https://gakuen.idolmaster-official.jp/idol/ume/",
@@ -122,7 +131,8 @@
     "voices": [
       "https://gakuen.idolmaster-official.jp/assets/data/voice/ume/voice_1.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/ume/voice_2.mp3"
-    ]
+    ],
+    "introduction": "補欠入学の新入生。元気いっぱい、身体能力抜群の元アスリート。 姉である咲季のことが大大大大大好きで、心から尊敬し、ライバル視し、最大の目標としている。 咲季の献身的なサポートによって、アイドルの才能を開花させていく。"
   },
   "hmsz": {
     "source_url": "https://gakuen.idolmaster-official.jp/idol/misuzu/",
@@ -134,7 +144,8 @@
     "voices": [
       "https://gakuen.idolmaster-official.jp/assets/data/voice/misuzu/voice_3.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/misuzu/voice_4.mp3"
-    ]
+    ],
+    "introduction": "のんびりマイペースな女の子。自分にも他人にも優しく甘い。他者のお世話をしたり、甘やかしたりするのが大好き。甘えん坊な親友を、妹や娘のように慈しみ、大切にしている。"
   },
   "jsna": {
     "source_url": "https://gakuen.idolmaster-official.jp/idol/sena/",
@@ -146,7 +157,8 @@
     "voices": [
       "https://gakuen.idolmaster-official.jp/assets/data/voice/sena/voice_1.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/sena/voice_2.mp3"
-    ]
+    ],
+    "introduction": "初星学園の生徒会長。「学園一のアイドル」と呼ばれ、多くの生徒たちから慕われている。 学園長の孫娘で、幼少時からアイドルのエリート教育を受けて育った。 「アイドルの才能を見抜く」特技があり、ことねを一目で気に入るが、なぜか距離を置かれてしまう。"
   },
   "atbm": {
     "source_url": "https://gakuen.idolmaster-official.jp/idol/tsubame/",
@@ -159,6 +171,20 @@
       "https://gakuen.idolmaster-official.jp/assets/data/voice/tsubame/voice_1.mp3",
       "https://gakuen.idolmaster-official.jp/assets/data/voice/tsubame/voice_2.mp3"
     ],
-    "introduction": "初星学園生徒会副会長。学園No.2のアイドル。\n実力相応のプライドを持ち、尊大な態度を取る。自分にも他人にも厳しいが、\n面倒見は良い。幼馴染の星南をライバル視しており、\nいずれ星南を超えて『一番星』になると公言している。"
+    "introduction": "初星学園生徒会副会長。学園No.2のアイドル。実力相応のプライドを持ち、尊大な態度を取る。自分にも他人にも厳しいが、面倒見は良い。幼馴染の星南をライバル視しており、いずれ星南を超えて『一番星』になると公言している。"
+  },
+  "hkne": {
+    "source_url": "https://gakuen.idolmaster-official.jp/idol/kanae/",
+    "quote": [
+      "お嬢様の隣にいることが、",
+      "いまの私で叶わぬのなら、",
+      "私も変わらねばなりません。"
+    ],
+    "photo": "https://gakuen.idolmaster-official.jp/assets/img/idol/kanae/thumb.png",
+    "voices": [
+      "https://gakuen.idolmaster-official.jp/assets/kanae/voice/voice_1.mp3",
+      "https://gakuen.idolmaster-official.jp/assets/kanae/voice/voice_2.mp3"
+    ],
+    "introduction": "倉本家のメイドとして、倉本千奈の近侍を務める。真面目で献身的な努力家。主を中心に物事を考えており、自分自身の気持ちにはひどく鈍い。アイドルへの関心や素質を秘めているものの、本人はあくまで『お嬢様を支えるための研修』と考えている。"
   }
 }

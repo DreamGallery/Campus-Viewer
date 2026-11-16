@@ -21,3 +21,21 @@ class PendingTextTests(unittest.TestCase):
         self.assertIsNone(hints['category_id'])
         self.assertEqual(hints['character_ids'], [])
         self.assertEqual(hints['images'], [])
+
+    def test_character_story_hints_without_masterdata(self):
+        examples = {
+            'adv_dear_hski_037-01': 'character.dearness',
+            'adv_pstory_002_hski_opening-normal-01': 'character.training_story',
+            'adv_pgrowth_001_hski_01': 'character.training_growth',
+            'adv_pevent_003_hski_activity_021': 'character.training_activity',
+            'adv_pevent_001_hski_school_010': 'character.training_school',
+            'adv_pevent_002_hski_sales_4-002-02': 'character.training_business',
+            'adv_live_hski_001_start-02-01': 'character.live',
+        }
+        for script_id, category in examples.items():
+            with self.subTest(script_id=script_id):
+                hints = filename_hints(script_id, ['hski', 'ttmr'])
+                self.assertEqual(hints['category_id'], category)
+                self.assertEqual(hints['character_ids'], ['hski'])
+                self.assertEqual(hints['images'], [])
+        self.assertIsNone(filename_hints('adv_pevent_001_hski_unknown_001', ['hski'])['category_id'])

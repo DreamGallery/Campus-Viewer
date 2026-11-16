@@ -17,6 +17,7 @@ from .local_releases import KEEP_ENV, prune_local_releases, retention_count
 from .resource_archive import prepare_archive, prune_archives
 from .audio_download import fetch_manifest
 from .voice_encoding import initialize_voice_encoding
+from .official_profiles import sync_profiles
 
 SOURCES = {
     'master': ('https://github.com/vertesan/gakumasu-diff.git', 'main'),
@@ -68,7 +69,7 @@ def fetch_masterdata(root, repos):
     return snapshot, state
 
 
-def input_signature(repos, manifest, master_snapshot=None):
+def input_signature(repos, manifest, master_snapshot=None, official_profiles=None):
     commits = {key: subprocess.check_output(['git', '-C', str(repos / key), 'rev-parse', 'HEAD']).decode().strip()
                for key in SOURCES if key != 'master' or master_snapshot is None}
     code = hashlib.sha256()
@@ -79,7 +80,8 @@ def input_signature(repos, manifest, master_snapshot=None):
     # Local retention does not change published resources or require a rebuild.
     config = {k: v for k, v in os.environ.items() if k.startswith('CAMPUS_') and k != KEEP_ENV}
     return hashlib.sha256(json.dumps({'commits': commits, 'manifest': manifest,
-        'code': code.hexdigest(), 'config': config, 'master': master_snapshot}, sort_keys=True).encode()).hexdigest()
+        'code': code.hexdigest(), 'config': config, 'master': master_snapshot,
+        'official_profiles': official_profiles}, sort_keys=True).encode()).hexdigest()
 
 
 def link_copy(src, dst):
@@ -157,13 +159,16 @@ def update(root):
                 sync_repo(repos, key, os.getenv(f'CAMPUS_{key.upper()}_REPO', url), os.getenv(f'CAMPUS_{key.upper()}_BRANCH', branch))
             phase('从游戏 API 获取并验证 masterdb' if master_source() == 'api' else '读取 Git masterdata')
             masterdata, master_snapshot = fetch_masterdata(root, repos)
+            phase('同步官网角色资料')
+            official_path = cache / 'official-profiles.json'
+            official_profiles = sync_profiles(masterdata, official_path)
             phase('检查游戏资源清单与仓库提交')
             manifest = fetch_manifest(config_repo=repos / 'toolkit', config_ref='HEAD')
-            inputs = input_signature(repos, manifest, master_snapshot)
+            inputs = input_signature(repos, manifest, master_snapshot, official_profiles)
             saved = root / 'current/update-inputs.json'
             if os.getenv('CAMPUS_FORCE_UPDATE') != '1' and saved.exists() and json.loads(saved.read_text()).get('signature') == inputs:
                 status.update(state='ready', revision=manifest['revision'], release=(root / 'current').resolve().name)
-                phase('仓库与游戏资源未变化，跳过构建和上传')
+                phase('仓库、游戏资源与官网资料未变化，跳过构建和上传')
                 prune_local_releases(root, keep_releases)
                 return True
             atomic_write(cache / 'audio/OctoManifest.json', manifest)
@@ -189,7 +194,7 @@ def update(root):
                 '--decoder', os.getenv('CAMPUS_DECODER', '/usr/local/bin/vgmstream-cli'),
                 '--scope', os.getenv('CAMPUS_MUSIC_SCOPE', 'vocal'), *(['--ids', *music_ids] if music_ids else []))
             phase('生成并检查网页目录')
-            run('web_export', '--catalog', generated / 'story-index.json', '--masterdata', masterdata, '--stories', repos / 'story', '--assets', cache / 'web/assets/manifest.json', '--voices', generated / 'voice-index/manifest.json', '--output', cache / 'web/catalog')
+            run('web_export', '--catalog', generated / 'story-index.json', '--masterdata', masterdata, '--stories', repos / 'story', '--assets', cache / 'web/assets/manifest.json', '--voices', generated / 'voice-index/manifest.json', '--official-profiles', official_path, '--output', cache / 'web/catalog')
             command([sys.executable, '/app/scripts/verify_web_export.py', '--catalog', generated / 'story-index.json', '--web', cache / 'web'])
             phase('打包并发布资源版本')
             manifest = json.loads((cache / 'audio/OctoManifest.json').read_text())

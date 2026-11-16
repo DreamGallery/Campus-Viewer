@@ -77,7 +77,7 @@ def text_history(stories, revision):
     return dates, changes
 
 
-def build(catalog_path, masterdata, assets_path, voice_path, output, stories=None):
+def build(catalog_path, masterdata, assets_path, voice_path, output, stories=None, official_path=None):
     catalog_bytes = catalog_path.read_bytes()
     catalog = json.loads(catalog_bytes)
     asset_bytes = assets_path.read_bytes()
@@ -90,7 +90,7 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
     voices = {r['script_id']: r for r in voice_manifest['scripts']}
     source_bytes = [catalog_bytes, asset_bytes, voice_bytes, Path(__file__).read_bytes()]
     source_paths = [catalog_path, assets_path, voice_path, Path(__file__)]
-    official_path = Path(__file__).with_name('official_profiles.json')
+    official_path = Path(official_path) if official_path is not None else Path(__file__).with_name('official_profiles.json')
     official_bytes = official_path.read_bytes()
     official_profiles = json.loads(official_bytes)
     source_paths.append(official_path)
@@ -126,13 +126,14 @@ def build(catalog_path, masterdata, assets_path, voice_path, output, stories=Non
             continue
         ident = c['id']; record = records['Character:' + ident]
         details = {r['type'].removeprefix('CharacterDetailType_'): str(r['content']) for r in tables['CharacterDetail'] if r['characterId'] == ident}
-        if not details.get('Introduction') and official_profiles.get(ident, {}).get('introduction'):
+        if official_profiles.get(ident, {}).get('introduction'):
             details['Introduction'] = official_profiles[ident]['introduction']
         colors = next((r for r in tables['CharacterColor'] if r['characterId'] == ident), {})
         color = colors.get('mainColor') or 'D59C43'
         characters.append({'id': ident, 'name': c['name'], 'first_name': record['firstName'],
             'english_name': (record['alphabetFirstName'] + ' ' + record['alphabetLastName']).title(),
             'color': '#' + str(color), 'details': details,
+            'official_profile': official_profiles.get(ident),
             'gradient_colors': ['#' + str(colors.get(key) or color) for key in ('gradientColor1', 'gradientColor2')],
             'portrait': assets.get(f'img_chr_{ident}_00-full'),
             'avatar': assets.get(f'img_chr_{ident}_00-thumb-circle'),
@@ -334,7 +335,8 @@ def main():
     p.add_argument('--voices',type=Path,default=Path('generated/voice-index/manifest.json'))
     p.add_argument('--output',type=Path,default=Path('data/web/catalog'))
     p.add_argument('--stories', type=Path, help='Campus-Story Git checkout for committed text update dates')
-    a=p.parse_args(); result=build(a.catalog,a.masterdata,a.assets,a.voices,a.output,a.stories)
+    p.add_argument('--official-profiles', type=Path, help='Cached official profiles from the updater')
+    a=p.parse_args(); result=build(a.catalog,a.masterdata,a.assets,a.voices,a.output,a.stories,a.official_profiles)
     print(json.dumps({k:result[k] for k in ['build_id','script_count','entry_count']}))
 
 if __name__=='__main__': main()

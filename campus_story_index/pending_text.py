@@ -18,10 +18,13 @@ def filename_hints(script_id, character_ids):
     else:
         prefixes = [('adv_dear_', 'character.dearness'), ('adv_birthday_', 'character.birthday'),
                     ('adv_pstory_', 'character.training_story'), ('adv_pgrowth_', 'character.training_growth'),
+                    ('adv_live_', 'character.live'),
                     ('adv_event_highscore_', 'event.high_score'), ('adv_event_', 'event.story'),
                     ('adv_tutorial_', 'other.tutorial'), ('adv_tower-', 'other.tower'),
                     ('adv_gasha_', 'other.gacha'), ('adv_unit_', 'main.story')]
         category = next((value for prefix, value in prefixes if script_id.startswith(prefix)), None)
-        if script_id.startswith('adv_pevent_') and '_sales_' in script_id:
-            category = 'character.training_business'
+        event = re.fullmatch(r'adv_pevent_\d+_[a-z0-9]+_(activity|school|sales)_\d+(?:-\d+)*', script_id)
+        if event:
+            category = {'activity': 'character.training_activity', 'school': 'character.training_school',
+                        'sales': 'character.training_business'}[event[1]]
     return {'category_id': category, 'character_ids': characters, 'images': images}

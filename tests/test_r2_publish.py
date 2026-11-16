@@ -80,6 +80,23 @@ class R2Tests(unittest.TestCase):
             clips = json.loads(s3.objects['test/'+mapping['web/catalog/builds/one/chapters/a.json']])['clips']
             self.assertEqual(clips[0], clips[1])
 
+    def test_official_profiles_remain_in_published_catalog(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {
+                'CAMPUS_R2_ENDPOINT': 'https://test', 'CAMPUS_R2_BUCKET': 'b', 'CAMPUS_R2_PREFIX': 'test',
+                'AWS_ACCESS_KEY_ID': 'test', 'AWS_SECRET_ACCESS_KEY': 'test'}):
+            root = Path(folder); self.stage(root, 'profiles'); s3 = S3()
+            manifest = root / 'releases/profiles/web/catalog/manifest.json'
+            data = json.loads(manifest.read_text())
+            profile = {'introduction': 'Official text', 'quote': ['Quote'],
+                       'photo': 'https://gakuen.idolmaster-official.jp/assets/img/idol/sample/thumb.png',
+                       'voices': ['https://gakuen.idolmaster-official.jp/assets/sample/voice/voice_1.mp3']}
+            data['characters'] = [{'id': 'new', 'official_profile': profile}]
+            manifest.write_text(json.dumps(data))
+            publish_release(root, 'profiles', s3)
+            mapping = json.loads(s3.objects['test/releases/profiles/file-map.json'])['files']
+            published = json.loads(s3.objects['test/' + mapping['web/catalog/manifest.json']])
+            self.assertEqual(published['characters'][0]['official_profile'], profile)
+
     def test_missing_or_escaping_media_prevents_publication(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {
                 'CAMPUS_R2_ENDPOINT':'https://test', 'CAMPUS_R2_BUCKET':'b', 'CAMPUS_R2_PREFIX':'test',

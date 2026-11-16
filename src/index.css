@@ -361,6 +361,8 @@ main {
   margin: 0;
 }
 .introduction {
+  position: relative;
+  z-index: 1;
   font-size: 12px;
   line-height: 2.05;
   min-height: calc(2.05em * 4);
@@ -379,7 +381,11 @@ main {
   width: 100px;
   height: 65px;
   flex-shrink: 0;
+  transform: scale(1.5);
+  transform-origin: right bottom;
+  pointer-events: none;
 }
+.profile-bottom .gold-button { position: relative; z-index: 1; }
 .gold-button,
 .outline-button {
   display: inline-flex;
@@ -1396,6 +1402,7 @@ b, strong { font-weight: 600; }
 .roster .idol-tile { padding: 5px 5px 12px; border: 1px solid var(--line); background: transparent; }
 .roster .idol-tile.selected { border-color: var(--idol); box-shadow: inset 0 0 0 1px var(--idol); background: color-mix(in srgb, var(--idol) 8%, transparent); }
 .idol-photo { display: block; overflow: hidden; }
+.idol-photo-initial { display: grid; place-items: center; width: 100%; aspect-ratio: 3 / 4; background: var(--idol); color: #fff; font-size: 44px; font-weight: 500; }
 .roster .idol-tile img { margin: 0; transition: transform .3s; }
 .roster .idol-tile:hover img { transform: scale(1.08); }
 .roster .idol-tile > span:last-child { display: block; font-size: 15px; line-height: 1.5; margin-top: 10px; white-space: normal; }

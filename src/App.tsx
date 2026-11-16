@@ -46,7 +46,7 @@ import {
 import ResourceStatus from "./ResourceStatus";
 import ResourceVersions from "./ResourceVersions";
 import { characterGradients } from "./character-colors";
-import { officialProfiles } from "./official-profiles";
+import { officialProfile } from "./official-profiles";
 import ProfileSlides from "./ProfileSlides";
 import CharacterCarousel from "./CharacterCarousel";
 import ProfileVoice from "./ProfileVoice";
@@ -176,9 +176,10 @@ function SectionTitle({ en, title }: { en: string; title: string }) {
   );
 }
 function Portrait({ character }: { character: Character }) {
+  const profile = officialProfile(character);
   return (
     <div className="portrait-stage">
-      {officialProfiles[character.id]?.quote && <div className="portrait-caption" lang="ja">{officialProfiles[character.id].quote.map(line => <span key={line}>{line}</span>)}</div>}
+      {profile?.quote.length ? <div className="portrait-caption" lang="ja">{profile.quote.map(line => <span key={line}>{line}</span>)}</div> : null}
       {character.portrait ? (
         <img
           className="portrait"
@@ -193,6 +194,15 @@ function Portrait({ character }: { character: Character }) {
       </span>
     </div>
   );
+}
+function RosterPhoto({ character }: { character: Character }) {
+  const photo = officialProfile(character)?.photo;
+  const [failedPhoto, setFailedPhoto] = useState<string>();
+  return <span className="idol-photo" aria-hidden="true">
+    {photo && failedPhoto !== photo
+      ? <img src={photo} alt="" loading="lazy" onError={() => setFailedPhoto(photo)} />
+      : <span className="idol-photo-initial">{Array.from(character.name.trim())[0]}</span>}
+  </span>;
 }
 function Roster({ selected }: { selected: string }) {
   const { characters } = useCatalog();
@@ -223,7 +233,7 @@ function Roster({ selected }: { selected: string }) {
           style={{ "--idol": c.color } as CSSProperties}
           aria-current={c.id === selected ? "page" : undefined}
         >
-          {(officialProfiles[c.id]?.photo || c.avatar) && <span className="idol-photo"><img src={officialProfiles[c.id]?.photo || c.avatar!} alt="" loading="lazy" onError={event => { if (c.avatar && event.currentTarget.src !== c.avatar) event.currentTarget.src = c.avatar; }} /></span>}
+          <RosterPhoto character={c} />
           <span lang="ja">{c.name}</span>
         </Link>
       ))}
@@ -232,9 +242,8 @@ function Roster({ selected }: { selected: string }) {
 }
 function CharacterProfile({ character }: { character: Character }) {
   const d = character.details;
-  const officialIntroduction = officialProfiles[character.id]?.introduction;
-  const introduction = !d.Introduction || d.Introduction.replace(/\s/g, "") === officialIntroduction?.replace(/\s/g, "")
-    ? officialIntroduction : d.Introduction;
+  const profile = officialProfile(character);
+  const introduction = profile?.introduction || d.Introduction;
   return (
       <ProfileSlides key={character.id}>
         <Portrait character={character} />
@@ -245,7 +254,7 @@ function CharacterProfile({ character }: { character: Character }) {
           <p className="cv">
             CV <span lang="ja">{d.Cv || "—"}</span>
           </p>
-          {officialProfiles[character.id]?.voices.length > 0 && <ProfileVoice key={character.id} voices={officialProfiles[character.id].voices} />}
+          {profile?.voices.length ? <ProfileVoice key={character.id} voices={profile.voices} /> : null}
           <div className="profile-label">
             PROFILE <span>角色档案</span>
           </div>

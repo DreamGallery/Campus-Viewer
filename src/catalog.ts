@@ -11,6 +11,13 @@ export interface Character {
   portrait: string | null;
   avatar: string | null;
   signature: string | null;
+  official_profile?: {
+    source_url: string;
+    introduction: string;
+    quote: string[];
+    photo: string | null;
+    voices: string[];
+  } | null;
 }
 export interface Category {
   id: string;

@@ -7,7 +7,13 @@ export interface TextUpdate {
 }
 // Only recognized filename families are grouped without masterdata.
 export function pendingStoryKey(id: string): string {
+  const dearness = /^(adv_dear_[a-z0-9]+)_\d+(?:-\d+)*(-horizontal)?$/.exec(id);
+  if (dearness) return dearness[1] + (dearness[2] || '');
   const match = /^(adv_(?:cidol-[a-z0-9]+-\d+-\d+|csprt-\d+-\d+))_\d+$/.exec(id)
+    || /^(adv_pstory_\d+_[a-z0-9]+)_[a-z0-9-]+$/.exec(id)
+    || /^(adv_pgrowth_\d+_[a-z0-9]+)_\d+(?:-\d+)*$/.exec(id)
+    || /^(adv_pevent_\d+_[a-z0-9]+_(?:activity|school|sales))_\d+(?:-\d+)*$/.exec(id)
+    || /^(adv_live_[a-z0-9]+_\d+)_(?:start|end)-\d+(?:-\d+)*$/.exec(id)
     || /^(adv_event_\d+)_(?:main|sub)-\d+(?:-\d+)?$/.exec(id)
     || /^(adv_event_highscore_introduction)-\d+$/.exec(id);
   return match?.[1] || id;
@@ -22,5 +28,9 @@ export function groupUpdates(rows: TextUpdate[]) {
     if (!group.items.some(item => item.script_id === row.script_id)) group.items.push(row);
     if (!group.images.length && row.images.length) group.images = row.images;
   }
-  return [...groups.values()].map(group => ({ ...group, items: group.items.sort((a,b) => a.script_id.localeCompare(b.script_id, 'ja', { numeric: true })) }));
+  return [...groups.values()].map(group => ({
+    ...group,
+    character_ids: [...new Set(group.items.flatMap(item => item.character_ids))],
+    items: group.items.sort((a,b) => a.script_id.localeCompare(b.script_id, 'ja', { numeric: true })),
+  }));
 }

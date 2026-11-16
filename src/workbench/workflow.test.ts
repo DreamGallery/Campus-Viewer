@@ -216,13 +216,55 @@ test('proofread completion credits translator and reviewer in the existing row',
  assert.equal(record.translation.display_id,'原译者');assert.equal(record.proofread.display_id,'校对名字');
 });
 
-import { groupUpdates, type TextUpdate } from '../text-updates';
+import { groupUpdates, pendingStoryKey, type TextUpdate } from '../text-updates';
+import { officialProfile } from '../official-profiles';
+test('indexed official profiles override rollout defaults, including explicitly absent photos and profiles',()=>{
+ const previous=officialProfile({id:'hski'});
+ assert.ok(previous?.photo);assert.ok(previous.voices.length);
+ const indexed={...previous,photo:null,voices:[],introduction:'New indexed profile'};
+ assert.equal(officialProfile({id:'hski',official_profile:indexed}),indexed);
+ assert.equal(officialProfile({id:'hski',official_profile:null}),null);
+ assert.equal(officialProfile({id:'new-character'}),null);
+});
+const updateRow=(id:string,more:Partial<TextUpdate>={}):TextUpdate=>({script_id:id,entry_id:id,title:'名称待补全',group_title:null,category_id:'event.story',character_ids:[],pending:true,images:[],csv_path:'CSV/'+id+'.csv',line_count:1,updated_at:1,change_kind:'added',commit:null,...more});
 test('text updates group recognized pending chapters without merging unrelated scripts or characters',()=>{
- const row=(id:string,more:Partial<TextUpdate>={}):TextUpdate=>({script_id:id,entry_id:id,title:'名称待补全',group_title:null,category_id:'event.story',character_ids:[],pending:true,images:[],csv_path:'CSV/'+id+'.csv',line_count:1,updated_at:1,change_kind:'added',commit:null,...more});
+ const row=updateRow;
  const groups=groupUpdates([row('adv_event_030_main-02'),row('adv_event_030_main-01'),row('adv_event_031_main-01'),row('unknown_01'),row('unknown_02')]);
  assert.equal(groups.length,4);assert.deepEqual(groups[0].items.map(r=>r.script_id),['adv_event_030_main-01','adv_event_030_main-02']);
  assert.equal(groupUpdates([row('a',{pending:false,group_title:'同名',character_ids:['hski']}),row('b',{pending:false,group_title:'同名',character_ids:['hume']})]).length,2);
  assert.equal(groupUpdates([row('a',{pending:false,group_id:'one',group_title:'同名'}),row('b',{pending:false,group_id:'two',group_title:'同名'})]).length,2);
+});
+
+test('pending character chapters fold by known filename family, preserving character, mode and story type',()=>{
+ const families=[
+  ['adv_dear_fktn',['adv_dear_fktn_025','adv_dear_fktn_037-01']],
+  ['adv_dear_hkne-horizontal',['adv_dear_hkne_000-01-horizontal','adv_dear_hkne_000-02-horizontal']],
+  ['adv_pstory_002_fktn',['adv_pstory_002_fktn_opening-normal-02','adv_pstory_002_fktn_after-audition-final-normal-01']],
+  ['adv_pgrowth_001_fktn',['adv_pgrowth_001_fktn_01','adv_pgrowth_001_fktn_02']],
+  ['adv_pevent_001_fktn_school',['adv_pevent_001_fktn_school_004','adv_pevent_001_fktn_school_010']],
+  ['adv_pevent_002_fktn_sales',['adv_pevent_002_fktn_sales_3-006-01','adv_pevent_002_fktn_sales_4-002-02']],
+  ['adv_pevent_003_fktn_activity',['adv_pevent_003_fktn_activity_021','adv_pevent_003_fktn_activity_022']],
+  ['adv_live_fktn_001',['adv_live_fktn_001_start-02-01','adv_live_fktn_001_end-01-01']],
+ ] as const;
+ for(const [key,ids] of families){
+  assert.deepEqual(ids.map(pendingStoryKey),[key,key]);
+  assert.equal(groupUpdates(ids.map(id=>updateRow(id))).length,1);
+ }
+ const separate=['adv_dear_hkne_001','adv_dear_hkne_000-01-horizontal','adv_dear_fktn_001',
+  'adv_pstory_001_fktn_opening-normal-01','adv_pstory_002_fktn_opening-normal-01',
+  'adv_pevent_001_fktn_school_001','adv_pevent_001_fktn_activity_001','adv_pevent_001_amao_school_001',
+  'adv_pevent_001_fktn_unknown_001','adv_pevent_001_fktn_unknown_002'];
+ assert.equal(groupUpdates(separate.map(id=>updateRow(id))).length,separate.length);
+});
+
+test('formal update groups override filename hints and pending groups retain character names',()=>{
+ const ids=['adv_dear_hkne_000-01-horizontal','adv_dear_hkne_000-02-horizontal'];
+ const pending=groupUpdates(ids.map(id=>updateRow(id,{category_id:'character.dearness',character_ids:['hkne']})));
+ assert.equal(pending.length,1);assert.deepEqual(pending[0].character_ids,['hkne']);
+ const linked=groupUpdates(ids.map((id,i)=>updateRow(id,{pending:false,category_id:'event.story',character_ids:['hkne'],group_id:'event:'+i,group_title:'正式活动 '+i})));
+ assert.equal(linked.length,2);assert.equal(linked[0].title,'正式活动 0');
+ assert.equal(linked[0].items[0].category_id,'event.story');
+ assert.equal(groupUpdates([pending[0].items[0],linked[0].items[0]]).length,2);
 });
 
 import { taskDatePages } from './date-pages';

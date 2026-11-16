@@ -110,7 +110,11 @@ export default function TextUpdates() {
         {group.images.length ? <CardPreview images={group.images} title={group.title} zoomable={!["main", "event"].includes(group.items[0].category_id.split(".")[0])} imageAspectRatio={group.items[0].category_id.split(".")[0] === "main" ? 16 / 9 : undefined} /> : <div className="update-art-placeholder" aria-hidden="true"><BookOpen size={38} strokeWidth={1} /></div>}
         <details>
           <summary>
-            <div className="group-copy"><p className="eyebrow">{catalog.categories.find(c => c.id === group.items[0].category_id)?.name || '待分类'}</p><h3>{group.title}</h3><span>{group.items.length} 个章节</span>{group.items.some(r => r.pending) && <span className="pending-badge">待补全资料</span>}</div><ChevronDown size={18} className="disclosure-icon" />
+            <div className="group-copy">
+              <p className="eyebrow">{catalog.categories.find(c => c.id === group.items[0].category_id)?.name || '待分类'}{group.items[0].category_id.startsWith('character.') && <span lang="ja"> · {group.character_ids.length ? group.character_ids.map(id => names.get(id) || id).join(' · ') : '共通 / 未标注角色'}</span>}</p>
+              <h3>{group.title}</h3>
+              <span>{group.items.length} 个章节</span>{group.items.some(r => r.pending) && <span className="pending-badge">待补全资料</span>}
+            </div><ChevronDown size={18} className="disclosure-icon" />
           </summary>
           {exportMode && <button className="update-select-group" disabled={exporting} aria-pressed={group.items.every(row => selected.has(row.script_id))} onClick={() => toggle(group.items.map(row => row.script_id))}>选择此剧情全部章节</button>}
           <ol className="chapter-list">{group.items.map(row => <li key={row.script_id} className="update-chapter">

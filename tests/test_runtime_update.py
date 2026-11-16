@@ -7,7 +7,12 @@ from unittest.mock import patch
 from campus_story_index.runtime_update import publish, update, input_signature
 
 
-class RuntimeUpdateTests(unittest.TestCase):
+class RuntimeTestCase(unittest.TestCase):
+    def setUp(self):
+        self.profile_sync = self.enterContext(patch('campus_story_index.runtime_update.sync_profiles', return_value={}))
+
+
+class RuntimeUpdateTests(RuntimeTestCase):
     def fixture(self, root):
         cache, repos = root / 'cache', root / 'repos'
         for path in ['web/catalog/manifest.json', 'audio/clips/bank/0001.flac']:
@@ -62,6 +67,7 @@ class RuntimeUpdateTests(unittest.TestCase):
             (root/'current').symlink_to(saved)
             with patch.dict(os.environ, {'CAMPUS_LOCAL_RELEASES_KEEP': '1'}), patch('campus_story_index.runtime_update.fetch_masterdata',return_value=(Path('/fake-master'),{'version':'test'})), patch('campus_story_index.runtime_update.sync_repo'), patch('campus_story_index.runtime_update.fetch_manifest',return_value={'revision':62}), patch('campus_story_index.runtime_update.input_signature',return_value='same'), patch('campus_story_index.runtime_update.command') as command, patch('campus_story_index.runtime_update.publish') as pub:
                 self.assertTrue(update(root));command.assert_not_called();pub.assert_not_called()
+                self.profile_sync.assert_called_once_with(Path('/fake-master'), root / 'cache/official-profiles.json')
             self.assertEqual(json.loads((root/'status.json').read_text())['state'],'ready')
             self.assertFalse(old.exists())
             self.assertTrue(saved.exists())
@@ -112,7 +118,7 @@ class RuntimeUpdateTests(unittest.TestCase):
             self.assertNotEqual(first,input_signature(Path('/fake'),{'revision':62}))
 
 
-class MasterSourceTests(unittest.TestCase):
+class MasterSourceTests(RuntimeTestCase):
     def test_api_snapshot_changes_signature_without_master_git_checkout(self):
         with patch('campus_story_index.runtime_update.subprocess.check_output', return_value=b'commit') as git:
             one = input_signature(Path('/fake'), {}, {'version': 'one'})
@@ -140,7 +146,7 @@ class MasterSourceTests(unittest.TestCase):
             with self.assertRaises(RuntimeError): fetch_masterdata(Path('/fake'), Path('/fake/repos'))
 
 
-class VoiceRuntimeTests(unittest.TestCase):
+class VoiceRuntimeTests(RuntimeTestCase):
     def test_api_masterdb_and_selected_voice_encoding_are_used_together(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {
                 'CAMPUS_MASTER_SOURCE': 'api', 'CAMPUS_VOICE_FORMAT': 'aac',
@@ -161,3 +167,11 @@ class VoiceRuntimeTests(unittest.TestCase):
                 self.assertEqual(extract[extract.index('--bitrate') + 1], '96')
                 catalog = next(args for args in calls if 'campus_story_index' in args)
                 self.assertEqual(catalog[catalog.index('--masterdata') + 1], master)
+                export = next(args for args in calls if 'campus_story_index.web_export' in args)
+                self.assertEqual(export[export.index('--official-profiles') + 1], root / 'cache/official-profiles.json')
+
+    def test_only_official_profile_change_updates_input_signature(self):
+        with patch('campus_story_index.runtime_update.subprocess.check_output', return_value=b'commit'):
+            first = input_signature(Path('/fake'), {'revision': 89}, {'version': 'same'}, {'new': {'introduction': 'Old'}})
+            changed = input_signature(Path('/fake'), {'revision': 89}, {'version': 'same'}, {'new': {'introduction': 'New'}})
+            self.assertNotEqual(first, changed)

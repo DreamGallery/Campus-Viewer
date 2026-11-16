@@ -8,7 +8,7 @@ import { api, Auth, Github, decode, encode, Issue } from './github';
 import { CsvDataLine, CsvTextInfo, extractInfoFromCsvText, mergeTranslation, toCsvText } from './upstream/csv';
 import { displayWorkUser, findWorkUser, subscribeWorkUsers, workUsersVersion, applyTrack, completeStage, completionPath, docFromIssue, DocTask, draftInfoOf, fetchRecordForWrite, myStatusOf, sameWorkUser, saveDraft, setAssigneeUsers, syncRecordTracks, TrackKey, validateRowsHtmlTags, WORK_BRANCH, WORK_OWNER, WORK_REPO } from './upstream/workflow';
 import { docStatus, STORY_LABELS, storyKind } from './upstream/document-filter';
-import { ArrowLeft, UserRound } from 'lucide-react';
+import { ArrowLeft, LayoutGrid, List, UserRound } from 'lucide-react';
 import { useCatalog, type ChapterVoices } from '../catalog';
 import { usePageLoading } from '../page-loading';
 import { VoicePlayer } from './VoicePlayer';
@@ -51,6 +51,15 @@ export function WorkbenchPage() {
   const [search, setSearch] = useState(''), [mine, setMine] = useState(false);
   const [category, setCategory] = useState('all'), [status, setStatus] = useState('all'), [sort, setSort] = useState('default');
   const [page, setPage] = useState(1);
+  const [view, setView] = useState<'cards' | 'list'>(() => {
+    try { return localStorage.getItem('campus-workbench-view-v1') === 'list' ? 'list' : 'cards'; }
+    catch { return 'cards'; }
+  });
+  const changeView = (next: 'cards' | 'list') => {
+    setView(next);
+    try { localStorage.setItem('campus-workbench-view-v1', next); }
+    catch { /* The view still switches when browser storage is unavailable. */ }
+  };
   const [selectionMode, setSelectionMode] = useState<'export' | TrackKey | null>(null);
   const exportMode = selectionMode === 'export';
   const [claiming, setClaiming] = useState(false), [claimNotice, setClaimNotice] = useState('');
@@ -151,14 +160,24 @@ export function WorkbenchPage() {
         <label>任务状态 <Select aria-label="任务状态" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="all">全部状态</option>{['待翻译','翻译中','待校对','校对中','已完成'].map(s => <option key={s}>{s}</option>)}</Select></label>
         <label>排序 <Select aria-label="任务排序" value={sort} onChange={e => { setSort(e.target.value); setPage(1); }}><option value="default">默认顺序</option><option value="updated">最近更新</option><option value="name">剧情名称</option></Select></label>
         {(['export', 'tr', 'pr'] as const).map(mode => <button key={mode} disabled={claiming} aria-pressed={selectionMode === mode} onClick={() => changeMode(mode)}>{selectionMode === mode ? '退出选择' : { export: '选择导出', tr: '认领翻译', pr: '认领校对' }[mode]}</button>)}
+      </div>
+      <div className="work-results-toolbar">
         <span>{mine ? '我的任务' : '全部任务'} · {shown.length} 项</span>
+        <div className="work-view-toggle" role="group" aria-label="任务显示方式">
+          <button type="button" aria-pressed={view === 'cards'} onClick={() => changeView('cards')}><LayoutGrid size={16} aria-hidden="true" />卡片</button>
+          <button type="button" aria-pressed={view === 'list'} onClick={() => changeView('list')}><List size={16} aria-hidden="true" />列表</button>
+        </div>
       </div>
       {!shown.length && <p>没有符合条件的任务</p>}
       {selectionMode && <><div className="work-toolbar"><button disabled={claiming} onClick={() => setSelected(new Set(shown.filter(eligible).map(d => d.number)))}>选择筛选结果</button><button disabled={claiming} onClick={() => setSelected(prev => new Set([...prev, ...pageTasks.filter(eligible).map(d => d.number)]))}>选择本页</button><button disabled={claiming || !selected.size} onClick={() => setSelected(new Set())}>清空选择</button></div>
       {exportMode ? <TaskExport tasks={docs.filter(d => selected.has(d.number))} auth={auth} /> : <div className="work-toolbar"><span>已选 {selected.size} 项 · 仅可选择待认领任务</span><button className="work-primary" disabled={claiming || !selected.size} onClick={claimSelected}>确认认领{selectionMode === 'tr' ? '翻译' : '校对'}</button></div>}</>}
       {claimNotice && <p className="work-export-notice" role="status">{claimNotice}</p>}
-      <div className="work-tasks">{pageTasks.map(d => {
-        const content = <><small>{STORY_LABELS[storyKind(d.title)]} · {docStatus(d)}</small><strong>{d.title}</strong><span>翻译：{d.tr.state} {displayWorkUser(d.tr.user)}</span><span>校对：{d.pr.state} {displayWorkUser(d.pr.user)}</span><small>更新于 {new Date(d.updatedAt).toLocaleDateString('zh-CN')}</small></>;
+      <div className={`work-tasks${view === 'list' ? ' work-tasks-list' : ''}`}>{pageTasks.map(d => {
+        const content = <><span className="work-task-summary"><small>{STORY_LABELS[storyKind(d.title)]} · {docStatus(d)}</small><strong title={d.title}>{d.title}</strong></span>{(['tr', 'pr'] as const).map(track => {
+          const label = track === 'tr' ? '翻译：' : '校对：';
+          const text = `${d[track].state} ${displayWorkUser(d[track].user)}`.trim();
+          return <span key={track} className="work-task-track" title={label + text}>{label + text}</span>;
+        })}<small className="work-task-updated">更新于 {new Date(d.updatedAt).toLocaleDateString('zh-CN')}</small></>;
         return selectionMode
           ? <button key={d.number} type="button" disabled={claiming || !eligible(d)} className="work-task-option" aria-label={'选择 ' + d.title} aria-pressed={selected.has(d.number)} onClick={() => setSelected(prev => { const next = new Set(prev); if (next.has(d.number)) next.delete(d.number); else next.add(d.number); return next; })}>{content}</button>
           : <Link key={d.number} to={'/chapter/' + encodeURIComponent(d.title) + '?issue=' + d.number}>{content}</Link>;
@@ -182,7 +201,8 @@ const EditorRow = memo(function EditorRow({ row, index, clips, busy, onChange, o
   row: CsvDataLine; index: number; clips?: VoiceLine['clips']; busy: boolean;
   onChange: (index: number, value: string) => void; onPlay: (audio: HTMLAudioElement) => void;
 }) {
-  return <article className="work-row"><div className="work-original"><Speaker name={row.name} index={index} choice={row.id === 'select'} /><p>{textBody(row.text)}</p>{clips && <VoicePlayer clips={clips} row={index + 1} onPlay={onPlay} />}</div><TranslationInput index={index} source={row.text} value={row.trans} disabled={busy} onChange={trans => onChange(index, trans)} /></article>;
+  const speaker = <Speaker name={row.name} index={index} choice={row.id === 'select'} />;
+  return <article className="work-row"><div className="work-original">{clips?.length ? <VoicePlayer clips={clips} row={index + 1} speaker={speaker} onPlay={onPlay} /> : speaker}<p>{textBody(row.text)}</p></div><TranslationInput index={index} source={row.text} value={row.trans} disabled={busy} onChange={trans => onChange(index, trans)} /></article>;
 });
 export function ChapterWorkbench({ scriptId, voices }: { scriptId: string; voices?: ChapterVoices }) {
   useSyncExternalStore(subscribeWorkUsers, workUsersVersion);

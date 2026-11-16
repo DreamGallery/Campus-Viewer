@@ -53,6 +53,30 @@ class WebExportTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'Input changed'): build(*args)
             self.assertEqual(before,(root/'output/manifest.json').read_bytes())
 
+    def test_runtime_official_profiles_are_exported_and_versioned(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, args = self.fixture(directory)
+            catalog = json.loads((root / 'catalog.json').read_text())
+            catalog['characters'] = [{'id': 'new', 'name': 'New Idol', 'is_playable': True}]
+            catalog['source_records'] = [{'id': 'Character:new', 'data': {
+                'firstName': 'Idol', 'alphabetFirstName': 'Idol', 'alphabetLastName': 'New'}}]
+            atomic_write(root / 'catalog.json', catalog)
+            voices = json.loads((root / 'voices.json').read_text())
+            voices['sources']['catalog_sha256'] = hashlib.sha256((root / 'catalog.json').read_bytes()).hexdigest()
+            atomic_write(root / 'voices.json', voices)
+            atomic_write(root / 'CharacterDetail.yaml', [{'characterId': 'new', 'type': 'CharacterDetailType_Introduction', 'content': 'Game text'}])
+            original = (root / 'CharacterDetail.yaml').read_bytes()
+            profiles = root / 'official.json'
+            profile = {'introduction': 'Official text', 'photo': None, 'quote': ['Quote'], 'voices': []}
+            atomic_write(profiles, {'new': profile})
+            first = build(*args, official_path=profiles)
+            self.assertEqual(first['characters'][0]['official_profile'], profile)
+            self.assertEqual(first['characters'][0]['details']['Introduction'], profile['introduction'])
+            self.assertEqual((root / 'CharacterDetail.yaml').read_bytes(), original)
+            atomic_write(profiles, {'new': {**profile, 'introduction': 'Updated official text'}})
+            second = build(*args, official_path=profiles)
+            self.assertNotEqual(first['build_id'], second['build_id'])
+
     def test_header_rejects_invalid_and_preserves_plain_unity(self):
         self.assertEqual(decode_header(b'UnityFS\0example','sample'),b'UnityFS\0example')
         with self.assertRaises(ValueError): decode_header(b'tiny','sample')
@@ -430,6 +454,8 @@ class WebExportTests(unittest.TestCase):
             linked = publish()
             self.assertEqual(linked['pending_count'], 0)
             self.assertEqual(linked['items'][0]['title'], '第一话')
+            self.assertEqual(linked['items'][0]['category_id'], 'main.chapter')
+            self.assertEqual(linked['items'][0]['group_title'], '章节')
             catalog['scripts'][0]['text_status'] = 'empty'
             self.assertEqual(publish()['items'], [])
 
